@@ -212,7 +212,9 @@ class Trader(object):
 
     def subscribe(self, item):
         '''
-        Subscribe to model ["Offer","Account","Order","OpenPosition","Summary","Properties"]
+        Subscribes to the updates of the data models. Update will be pushed to client via socketIO
+        Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order',  'Account',  'Summary',
+        'LeverageProfile', 'Properties'
 
         :param item:
         :return: status Boolean, response String
@@ -230,7 +232,9 @@ class Trader(object):
 
     def get_info(self, item):
         '''
-        Get info about model ["Offer","Account","Order","OpenPosition","Summary","Properties"]
+        Gets current content snapshot of the specified data models.
+        Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order', 'Summary', 'LeverageProfile',
+        'Account', 'Properties'
 
         :param item:
         :return: status Boolean, response String
@@ -249,7 +253,11 @@ class Trader(object):
 
     def get_permissions(self, item):
         '''
-        Obtain account permissions
+        Gets the object which defines permissions for the specified account identifier and symbol.
+        Each property of that object specifies the corresponding permission ("createEntry", "createMarket",
+        "netStopLimit", "createOCO" and so on).
+        The value of the property specifies the permission status ("disabled", "enabled" or "hidden")
+
 
         :param item:
         :return: status Boolean, response String
@@ -259,7 +267,7 @@ class Trader(object):
     def market_order(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
                      order_type="AtMarket", stop=None, trailing_step=None, limit=None, is_in_pips=None):
         '''
-        Send a market order
+        Create a Market Order with options for At Best or Market Range, and optional attached stops and limits.
 
         :param account_id:
         :param symbol:
@@ -277,8 +285,8 @@ class Trader(object):
         '''
         if account_id is None or symbol is None or is_buy is None or amount is None:
             return False, "Failed to provide mandatory parameters"
-        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate, at_market=at_market,
-                      time_in_force=time_in_force, order_type=order_type)
+        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
+                      at_market=at_market, time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
             params['stop'] = stop
 
@@ -314,7 +322,7 @@ class Trader(object):
 
     def change_order(self, order_id, rate, range, amount, trailing_step=None):
         '''
-        Change order values
+        Change order rate/amount
 
         :param order_id:
         :param rate:
@@ -334,7 +342,7 @@ class Trader(object):
     def delete_order(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
                      order_type="AtMarket", stop=None, trailing_step=None, limit=None, is_in_pips=None):
         '''
-        Delete order
+        Delete open order
 
         :param account_id:
         :param symbol:
@@ -369,8 +377,14 @@ class Trader(object):
 
     def create_entry_order(self, account_id, symbol, is_buy, amount, limit, is_in_pips, order_type, time_in_force,
                            rate=0, stop=None, trailing_step=None):
-        '''
-        Create entry order
+        """
+        Create a Limit Entry or a Stop Entry order.
+        An order priced away from the market (not marketable) will be submitted as a Limit Entry order.
+        An order priced through the market will be submitted as a Stop Entry order.
+
+        If the market is at 1.1153 x 1.1159
+        *	Buy Entry order @ 1.1165 will be processed as a Buy Stop Entry order.
+        *	Buy Entry order @ 1.1154 will be processed as a Buy Limit Entry order
 
         :param account_id:
         :param symbol:
@@ -384,7 +398,7 @@ class Trader(object):
         :param stop: * Optional *
         :param trailing_step: * Optional *
         :return: status Boolean, response String
-        '''
+        """
         if account_id is None or symbol is None or is_buy is None or amount is None or limit is None or \
                 is_in_pips is None or order_type is None or time_in_force is None:
             return False, "Failed to provide mandatory parameters"
@@ -467,7 +481,12 @@ class Trader(object):
 
     def change_trade_stop_limit(self, trade_id, is_stop, rate, is_in_pips, trailing_step):
         '''
-        Modify trade stop/limit
+        Creates/removes/changes the stop/limit order for the specified trade.
+        If the current stop/limit rate for the specified trade is not set (is zero) and the new rate is not zero,
+        then creates a new order.
+        If the current stop/limit rate for the specified trade is set (is not zero), changes order rate
+        (if the new rate is not zero) or deletes order (if the new rate is zero).
+
 
         :param trade_id:
         :param is_stop:
@@ -487,7 +506,12 @@ class Trader(object):
 
     def change_order_stop_limit(self, order_id, is_stop, rate, is_in_pips, trailing_step):
         '''
-        Modify order's stop/limit
+        Creates/removes/changes the stop/limit order for the specified order.
+        If the current stop/limit rate for the specified order is not set (is zero) and the new rate is not zero,
+        then creates a new order.
+        If the current stop/limit rate for the specified order is set (is not zero), changes order rate
+        (if the new rate is not zero) or deletes order (if the new rate is zero).
+
 
         :param order_id:
         :param is_stop:
@@ -507,7 +531,8 @@ class Trader(object):
 
     def close_all_for_symbol(self, account_id, forSymbol, symbol, order_type, time_in_force):
         '''
-        Close all for account and symbol.
+        Closes all trades for the specified account and symbol by creating net quantity orders, if these orders are
+        enabled, or by creating regular close orders otherwise.
 
         :param account_id:
         :param forSymbol:
