@@ -230,7 +230,7 @@ class Trader(object):
         '''
         return self.send("/trading/unsubscribe", {"models": item})
 
-    def get_info(self, item):
+    def get_model(self, item):
         '''
         Gets current content snapshot of the specified data models.
         Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order', 'Summary', 'LeverageProfile',
@@ -264,7 +264,7 @@ class Trader(object):
         '''
         return self.send("/trading/permissions", {}, "get")
 
-    def market_order(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
+    def open_trade(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
                      order_type="AtMarket", stop=None, trailing_step=None, limit=None, is_in_pips=None):
         '''
         Create a Market Order with options for At Best or Market Range, and optional attached stops and limits.
@@ -535,10 +535,10 @@ class Trader(object):
         enabled, or by creating regular close orders otherwise.
 
         :param account_id:
-        :param forSymbol:
+        :param forSymbol: True/False
         :param symbol:
-        :param order_type:
-        :param time_in_force:
+        :param order_type: AtMarket / MarketRange
+        :param time_in_force: IOC GTC FOK DAY GTD
         :return: status Boolean, response String
         '''
         params = {}
