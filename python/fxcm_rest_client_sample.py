@@ -14,7 +14,6 @@ try:
         time.sleep(10)
         status, response = trader.get_model("OpenPosition")
         positions = json.loads(response)
-        # Based on structure returned, find USD/JPY open position and get trade_id. then close or...
         trader.close_all_for_symbol(account_id, True, "USD/JPY", "AtMarket", "GTC")
 
 except Exception as e:
