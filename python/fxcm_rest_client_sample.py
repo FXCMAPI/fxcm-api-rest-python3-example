@@ -7,11 +7,6 @@ trader.login()
 
 status, response = trader.get_model("Account")
 accounts = json.loads(response)
-''' based on sample results:
-{"response":{"executed":true},"accounts":[{"t":6,"ratePrecision":0,"accountId":"1027808","balance":39288.31,"usdMr":0,
-"mc":"N","accountName":"01027808","usdMr3":0,"hedging":"N","usableMargin3":39288.31,"usableMarginPerc":100,
-"usableMargin3Perc":100,"equity":39288.31,"usableMargin":39288.31,"dayPL":0,"grossPL":0}]}
-'''
 try:
     account_id = accounts['accounts'][0]['accountID']
     status, response = trader.open_trade(account_id, "USD/JPY", True, 10)
