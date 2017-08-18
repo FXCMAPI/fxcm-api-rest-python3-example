@@ -18,7 +18,7 @@
     },
     "authentication": {
         "client_id": "Titan",
-        "client_secret": "qqq"
+        "client_secret": ""
     },
     "logpath": "./logfile.txt",
     "_debugLevels": "Levels are (from most to least logging) DEBUG, INFO, WARNING, ERROR, CRITICAL",
