@@ -1,0 +1,28 @@
+{
+    "environments": {
+        "prod": {
+            "auth": "https://www-beta2.fxcorporate.com/oauth/token",
+            "trading": "https://api.fxcm.com",
+            "port": 443
+        },
+        "qa": {
+            "auth": "https://titan2x.fxcorporate.com/oauth/token",
+            "trading": "https://titan3x.fxcorporate.com",
+            "port": 443
+        },
+        "dev": {
+            "auth": "https://devtitan.fxcorporate.com:8080/oauth/token",
+            "trading": "https://devtitan.fxcorporate.com:8088",
+            "port": 8088
+        }
+    },
+    "authentication": {
+        "client_id": "Titan",
+        "client_secret": "qqq"
+    },
+    "logpath": "./logfile.txt",
+    "_debugLevels": "Levels are (from most to least logging) DEBUG, INFO, WARNING, ERROR, CRITICAL",
+    "debugLevel": "ERROR",
+    "subscription_lists": "#Determines default subscription list of item updates to listen to",
+    "subscription_list": ["Offer","Account","Order","OpenPosition","Summary","Properties"]
+}
