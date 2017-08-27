@@ -20,6 +20,7 @@ class Trader(object):
         self.socketIO = None
         self.updates = {}
         self.symbols = {}
+        self.symbol_info = {}
         self.user = user
         self.password = password
         self.env = environment
@@ -80,7 +81,7 @@ class Trader(object):
         if self.socketIO != None and self.socketIO.connected:
             params["socket_id"] = self.socketIO._engineIO_session.id
             params["access_token"] = self.access_token
-        print self.environment.get("trading")  + command, params
+        self.logger.info( self.environment.get("trading")  + command + str(params))
         if method == 'get':
             rresp = requests.get(self.environment.get("trading")  + command, params=params)
         else:
@@ -136,6 +137,11 @@ class Trader(object):
                 self.socketIO.on(item, self.message_handler)
         else:
             self.logger.error("Error processing request: /trading/subscribe:" + str(response))
+        # Obtain and store the list of instruments in the symbol_info dict
+        status, response = self.get_model("Offer")
+        if status is True:
+            for item in response['offers']:
+                self.symbol_info[item['currency']] = item
 
     def on_disconnect(self):
         '''
@@ -168,7 +174,7 @@ class Trader(object):
 
     def on_message(self, msg):
         '''
-        Sampel generic message handling. Will update that specific message type with the latest message
+        Sample generic message handling. Will update that specific message type with the latest message
 
         :return:
         '''
@@ -251,7 +257,7 @@ class Trader(object):
         '''
         return self.send("/trading/changePassword", {"oldPswd": oldpwd, "newPswd": newpwd, "confirmNewPswd": newpwd})
 
-    def get_permissions(self, item):
+    def permissions(self):
         '''
         Gets the object which defines permissions for the specified account identifier and symbol.
         Each property of that object specifies the corresponding permission ("createEntry", "createMarket",
@@ -318,7 +324,7 @@ class Trader(object):
                       time_in_force=time_in_force, order_type=order_type)
         if rate is not None:
             params['rate'] = rate
-        return self.send("/trading/open_trade", params)
+        return self.send("/trading/close_trade", params)
 
     def change_order(self, order_id, rate, range, amount, trailing_step=None):
         '''
@@ -337,7 +343,7 @@ class Trader(object):
                       amount=amount)
         if trailing_step is not None:
             params['trailing_step'] = trailing_step
-        return self.send("/trading/open_trade", params)
+        return self.send("/trading/change_order", params)
 
     def delete_order(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
                      order_type="AtMarket", stop=None, trailing_step=None, limit=None, is_in_pips=None):
@@ -546,7 +552,7 @@ class Trader(object):
             for k, v in locals().iteritems():
                 if k != "self":
                     params[k] = v
-            return self.send("/trading/change_order_stop_limit", params)
+            return self.send("/trading/close_all_for_symbol", params)
         except Exception as e:
             return False, str(e)
 
@@ -563,9 +569,11 @@ class Trader(object):
         :return: status Boolean, response String
         '''
         try:
+            initial_instrument = instrument
             if not isInt(instrument):
-                # TODO: convert name to number
-                pass
+                instrument = self.symbol_info.get(instrument, {}).get('offerId', -1)
+            if instrument < 0:
+                raise("Instrument %s not found" % initial_instrument)
             if num > 10000:
                 num = 10000
             params = dict(num=num)
@@ -574,6 +582,7 @@ class Trader(object):
                     if not isInt(v):
                         v = int(time.mktime(parse(v).timetuple()))
                     params[k] = v
+            print("/candles/%s/%s" % (instrument, period), params, "get")
             return self.send("/candles/%s/%s" % (instrument, period), params, "get")
         except Exception as e:
             return False, str(e)
