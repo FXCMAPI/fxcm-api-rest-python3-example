@@ -7,7 +7,7 @@ try:
     status, accounts = trader.get_model("Account")
     account_id = accounts['accounts'][0]['accountId']
     print("Opening a trade now -USD/JPY 10 lots on %s"  % account_id)
-    status, response = trader.open_trade(account_id, "USD/JPY", True, 10)
+    status, response = trader.open_trade(account_id, "USD/JPY", True, 11)
     if status is True:
         print("Open trade response: ", response)
         status, positions = trader.get_model("OpenPosition")
