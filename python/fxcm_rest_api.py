@@ -5,6 +5,7 @@ import json
 import uuid
 import threading
 from dateutil.parser import parse
+from datetime import datetime
 import time
 
 
@@ -556,7 +557,7 @@ class Trader(object):
         except Exception as e:
             return False, str(e)
 
-    def candles(self, instrument, period, num, From=None, To=None):
+    def candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
         '''
         Allow user to retrieve candle for a given instrument at a give time
 
@@ -566,6 +567,10 @@ class Trader(object):
         :param num: candles, max = 10,000
         :param From: timestamp or date/time string. Will conver to timestamp
         :param To: timestamp or date/time string. Will conver to timestamp
+        :param datetime_fmt: Adding this optional parameter will add an additional field to the candle data with the
+        timestamp converted to the datetime string provided. Example:
+        .candles("USD/JPY", "m1", 3, datetime_fmt="%Y/%m/%d %H:%M:%S:%f")
+        [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359, 109.358, 109.362, 109.357, 28, '2017/08/26 05:57:00:000000']
         :return: status Boolean, response String
         '''
         try:
@@ -573,7 +578,7 @@ class Trader(object):
             if not isInt(instrument):
                 instrument = self.symbol_info.get(instrument, {}).get('offerId', -1)
             if instrument < 0:
-                raise("Instrument %s not found" % initial_instrument)
+                raise ValueError("Instrument %s not found" % initial_instrument)
             if num > 10000:
                 num = 10000
             params = dict(num=num)
@@ -582,8 +587,11 @@ class Trader(object):
                     if not isInt(v):
                         v = int(time.mktime(parse(v).timetuple()))
                     params[k] = v
-            print("/candles/%s/%s" % (instrument, period), params, "get")
-            return self.send("/candles/%s/%s" % (instrument, period), params, "get")
+                status, candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
+                if datetime_fmt is not None:
+                    for i, candle in enumerate(candle_data['candles']):
+                        candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
+            return status, candle_data
         except Exception as e:
             return False, str(e)
 
