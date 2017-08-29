@@ -33,6 +33,7 @@ In addition to instrument_id, response, period_id and candles, a 'headers' field
 is returned, representing the candle fields.
 
 basic
+
     for item in basic['candles']: 
         print item
     
@@ -40,13 +41,15 @@ basic
     [1503694560, 109.336, 109.321, 109.337, 109.317, 109.366, 109.359, 109.366, 109.354, 83]
     [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359, 109.358, 109.362, 109.357, 28]
 date_fmt
+
     for item in date_fmt['candles']:
         print item
     
     [1503694500, 109.317, 109.336, 109.336, 109.314, 109.346, 109.366, 109.373, 109.344, 72, '2017/08/26 05:55:00:000000']
     [1503694560, 109.336, 109.321, 109.337, 109.317, 109.366, 109.359, 109.366, 109.354, 83, '2017/08/26 05:56:00:000000']
     [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359, 109.358, 109.362, 109.357, 28, '2017/08/26 05:57:00:000000']
-date_fmt_headers  
+date_fmt_headers
+
     for item in date_fmt_headers['candles']: 
         print item
     
