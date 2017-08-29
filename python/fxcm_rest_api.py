@@ -1,3 +1,4 @@
+from collections import namedtuple
 import requests
 from socketIO_client import SocketIO
 import logging
@@ -103,7 +104,7 @@ class Trader(object):
         return ret
 
     def _log_init(self):
-        self.logger = logging.getLogger(self.user + "_" + self.env + "_" +str(uuid.uuid4())[:8])        
+        self.logger = logging.getLogger(self.user + "_" + self.env + "_" +str(uuid.uuid4())[:8])
         self.ch = logging.StreamHandler()
         self.set_log_level(DEBUGLEVEL)   
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -556,8 +557,11 @@ class Trader(object):
             return self.send("/trading/close_all_for_symbol", params)
         except Exception as e:
             return False, str(e)
+    #
+    # def candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
+    #     return self.get_candles(instrument, period, num, From=None, To=None, datetime_fmt=None)
 
-    def candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
+    def get_candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
         '''
         Allow user to retrieve candle for a given instrument at a give time
 
@@ -588,9 +592,26 @@ class Trader(object):
                         v = int(time.mktime(parse(v).timetuple()))
                     params[k] = v
                 status, candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
+                headers= ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
+                          'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
                 if datetime_fmt is not None:
+                    headers.append("datestring")
                     for i, candle in enumerate(candle_data['candles']):
                         candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
+                candle_data['headers'] = headers
+                return status, candle_data
+        except Exception as e:
+            return False, str(e)
+
+    candles = get_candles
+
+    def candles_as_dict(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
+        try:
+            status, candle_data = self.get_candles(instrument, period, num, From=None, To=None, datetime_fmt=None)
+            if status == True:
+                Headers = namedtuple('Headers', candle_data['headers'])
+                candle_dict = map(Headers._make, candle_data['candles'])
+                candle_data['candles'] = candle_dict
             return status, candle_data
         except Exception as e:
             return False, str(e)
