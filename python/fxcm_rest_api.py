@@ -607,7 +607,7 @@ class Trader(object):
 
     def candles_as_dict(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
         try:
-            status, candle_data = self.get_candles(instrument, period, num, From=None, To=None, datetime_fmt=None)
+            status, candle_data = self.get_candles(instrument, period, num, From, To, datetime_fmt)
             if status == True:
                 Headers = namedtuple('Headers', candle_data['headers'])
                 candle_dict = map(Headers._make, candle_data['candles'])
