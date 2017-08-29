@@ -56,6 +56,7 @@ date_fmt_headers
     Headers(timestamp=1503694620, bidopen=109.321, bidclose=109.326, bidhigh=109.326, bidlow=109.316, askopen=109.359, askclose=109.358, askhigh=109.362, asklow=109.357, tickqty=28, datestring='2017/08/26 05:57:00')
     Headers(timestamp=1503694680, bidopen=109.326, bidclose=109.312, bidhigh=109.326, bidlow=109.31, askopen=109.358, askclose=109.374, askhigh=109.376, asklow=109.358, tickqty=42, datestring='2017/08/26 05:58:00')
     Headers(timestamp=1503694740, bidopen=109.312, bidclose=109.312, bidhigh=109.312, bidlow=109.31, askopen=109.374, askclose=109.374, askhigh=109.374, asklow=109.372, tickqty=4, datestring='2017/08/26 05:59:00')
+    
     for item in date_fmt_headers['candles']: 
         print "%s: Ask Close [%s], High Bid [%s] " % (item.datestring, item.askclose, item.bidhigh)
     ...
