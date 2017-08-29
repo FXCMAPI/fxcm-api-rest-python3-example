@@ -59,7 +59,7 @@ date_fmt_headers
     
     for item in date_fmt_headers['candles']: 
         print "%s: Ask Close [%s], High Bid [%s] " % (item.datestring, item.askclose, item.bidhigh)
-    ...
+    
     2017/08/26 05:57:00: Ask Close [109.358], High Bid [109.326]
     2017/08/26 05:58:00: Ask Close [109.374], High Bid [109.326]
     2017/08/26 05:59:00: Ask Close [109.374], High Bid [109.312]
