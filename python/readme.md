@@ -4,7 +4,7 @@ For a quick demo:
 -----------------
 1. Install python
 2. Run: pip install -r requirements.txt
-3. Change login and password in client.py file
+3. Change login and password in rest_client.py file
 4. Within the fxcm_rest.json file:
   a. * Set log path via the logpath field
   b. * Set the authentication client_id and client_secret details.
