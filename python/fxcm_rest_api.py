@@ -102,9 +102,10 @@ class Trader(object):
         else:
             return False, "OAuth2 authentication failed. Response code =" + str(post_resp.status_code)
 
-    def _send_request(self, method, command, params):
+    def _send_request(self, method, command, params, additional_headers={}):
         headers = HEADERS
         headers['User-Agent'] =  'request'
+        # headers.update(additional_headers)
         if self.socketIO != None and self.socketIO.connected:
             params["socket_id"] = self.socketIO._engineIO_session.id
             params["access_token"] = self.access_token
@@ -200,6 +201,7 @@ class Trader(object):
         :return: none
         '''
         md = json.loads(msg)
+        print md
         self.symbols[md["Symbol"]] = md
 
     def on_message(self, msg):
@@ -209,9 +211,10 @@ class Trader(object):
         :return:
         '''
         message = json.loads(msg)
+        print message
         self.updates[message["t"]] = message
 
-    def send(self, location, params, method='post'):
+    def send(self, location, params, method='post', additional_headers={}):
         '''
         Method to send REST requests to the API
 
@@ -221,23 +224,25 @@ class Trader(object):
         :return: status Boolean, response String
         '''
         try:
-            status, response = self._send_request(method, location, params)
+            status, response = self._send_request(method, location, params, additional_headers)
         except Exception as e:
             self.logger.error("Failed to send request [%s]: %s" % (params, e))
             status = False
             response = str(e)
         return status, response
 
-    def subscribe_symbol(self, instrument):
+    def subscribe_symbol(self, instrument, handler=None):
         '''
         Subscribe to given instrument
 
         :param instrument:
         :return: status Boolean, response String
         '''
-        return self.send("/subscribe", {"pairs": instrument})
+        handler = handler or self.on_price_update
+        self.socketIO.on(instrument, handler)
+        return self.send("/subscribe", {"pairs": instrument}, additional_headers={'Transfer-Encoding': "chunked"})
 
-    def unsubscribe_symbol(self, instrument):
+    def unsubscribe_symbol(self, instrument, additional_headers={'Transfer-Encoding': "chunked"}):
         '''
         Unsubscribe from instrument updates
 
