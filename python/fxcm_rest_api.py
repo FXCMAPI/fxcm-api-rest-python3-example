@@ -18,7 +18,7 @@ class Trader(object):
     '''FXCM REST API abstractor.
     Obtain a new instance of this class and use that to do all trade and account actions.
     '''
-    def __init__(self, user, password, environment, messageHandler=None):
+    def __init__(self, user, password, environment, messageHandler=None, purpose='General'):
         self.socketIO = None
         self.updates = {}
         self.symbols = {}
@@ -26,6 +26,7 @@ class Trader(object):
         self.user = user
         self.password = password
         self.env = environment
+        self.purpose = purpose
         if messageHandler is not None:
             self.message_handler = types.MethodType(messageHandler, self)
         else:
@@ -47,7 +48,7 @@ class Trader(object):
                                      params={'access_token': self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
-            thread_name = self.user + self.env
+            thread_name = self.user + self.env + self.purpose
             for thread in threading.enumerate():
                 if thread.name == thread_name:
                     thread.keepGoing = False

@@ -29,11 +29,11 @@ def getEnv(e):
         elif e == "q":  
             auth = 'https://titan2x.fxcorporate.com/oauth/token'
             trading = 'https://titan3x.fxcorporate.com'
-                socket_port = 443
+            socket_port = 443
         elif e == "d":
             auth = 'https://devtitan.fxcorporate.com:8080/oauth/token'
             trading = 'https://devtitan.fxcorporate.com:8088'
-                socket_port = 8088
+            socket_port = 8088
         else:
             print "Incorrect Environment Specified.  Enter p, q, or d"
             sys.exit(0)
