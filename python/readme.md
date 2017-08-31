@@ -23,14 +23,34 @@ A quick example is as follows;
     import fxcm_rest_api
     trader = fxcm_rest_api.Trader('username', 'password', 'environment')
     trader.login()
+    
+    #### Open Market Order
+    # query account details and use the first account found
+    status, accounts = trader.get_model("Account")
+    account_id = accounts['accounts'][0]['accountId']
+    # Open 10 lots on USD/JPY for the first account_id found.
+    status, response = trader.open_trade(account_id, "USD/JPY", True, 10)
+    if status:
+    # close all USD/JPY trades.
+      status, response = trader.close_all_for_symbol(account_id, True, "USD/JPY", "AtMarket", "GTC")
+    
+    #### Historical Data request
     status, basic = trader.candles("USD/JPY", "m1", 5)
     status, date_fmt = trader.candles("USD/JPY", "m1", 5, datetime_fmt="%Y/%m/%d %H:%M:%S")
     status, date_fmt_headers = trader.candles_as_dict("USD/JPY", "m1", 3, datetime_fmt="%Y/%m/%d %H:%M:%S")
     
-All calls to candles allow either instrument name, or offerId. They also allow the From and To to be specified
+    ##### Price subscriptions
+    status, subscription_result = trader.subscribe_symbol("USD/JPY")
+    
+    # Define alternative price update handler and supply that.
+    def pupdate(msg):
+        print "Price update: ", msg
+    status, subscription_result = trader.subscribe_symbol("USD/JPY", pupdate)
+  
+(All calls to candles allow either instrument name, or offerId. They also allow the From and To to be specified
 as timestamp or a date/time format that will be interpreted ("2017/08/01 10:00", "Aug 1, 2017 10:00", etc.).
 In addition to instrument_id, response, period_id and candles, a 'headers' field (not documented in the API notes)
-is returned, representing the candle fields.
+is returned, representing the candle fields.)
 
 basic
 
@@ -63,7 +83,13 @@ date_fmt_headers
     2017/08/26 05:57:00: Ask Close [109.358], High Bid [109.326]
     2017/08/26 05:58:00: Ask Close [109.374], High Bid [109.326]
     2017/08/26 05:59:00: Ask Close [109.374], High Bid [109.312]
-    
-As can be seen, this API wrapper provides ease of use and ease of data access.
+subscribe_symbol - default
 
-Please provide comments/suggestions for further enhancements.
+    {u'Updated': 1504167080, u'Rates': [110.467, 110.488, 110.629, 110.156], u'Symbol': u'USD/JPY'}
+    {u'Updated': 1504167081, u'Rates': [110.469, 110.49, 110.629, 110.156], u'Symbol': u'USD/JPY'}
+subscribe_symbol - overridden
+
+    Price update:  {"Updated":1504167248,"Rates":[110.446,110.468,110.629,110.156],"Symbol":"USD/JPY"}
+    Price update:  {"Updated":1504167250,"Rates":[110.446,110.468,110.629,110.156],"Symbol":"USD/JPY"}
+    
+
