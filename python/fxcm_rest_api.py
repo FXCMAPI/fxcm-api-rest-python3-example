@@ -64,7 +64,6 @@ class Trader(object):
     def _loop(self):
         while self._socketIO_thread.keepGoing:
             self.socketIO.wait(1)
-        print "Exiting thread"
         # self._socketIO_thread = threading.Thread(target=self.socketIO.wait)
         # self._socketIO_thread.setName(self.user + self.env)
         # self._socketIO_thread.setDaemon(True)
@@ -201,7 +200,6 @@ class Trader(object):
         :return: none
         '''
         md = json.loads(msg)
-        print md
         self.symbols[md["Symbol"]] = md
 
     def on_message(self, msg):
@@ -211,7 +209,6 @@ class Trader(object):
         :return:
         '''
         message = json.loads(msg)
-        print message
         self.updates[message["t"]] = message
 
     def send(self, location, params, method='post', additional_headers={}):
