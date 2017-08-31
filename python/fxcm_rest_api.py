@@ -8,7 +8,7 @@ import threading
 from dateutil.parser import parse
 from datetime import datetime
 import time
-
+import types
 
 def isInt(v):
     v = str(v).strip()
@@ -27,7 +27,7 @@ class Trader(object):
         self.password = password
         self.env = environment
         if messageHandler is not None:
-            self.message_handler = messageHandler
+            self.message_handler = types.MethodType(messageHandler, self)
         else:
             self.message_handler = self.on_message
         self._log_init()
@@ -47,9 +47,33 @@ class Trader(object):
                                      params={'access_token': self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
-            self._socketIO_thread = threading.Thread(target=self.socketIO.wait)
-            self._socketIO_thread.daemon = True
+            thread_name = self.user + self.env
+            for thread in threading.enumerate():
+                if thread.name == thread_name:
+                    thread.keepGoing = False
+            self._socketIO_thread = threading.Thread(target=self._loop)
+            self._socketIO_thread.setName(thread_name)
+            self._socketIO_thread.keepGoing = True
+            self._socketIO_thread.setDaemon(True)
             self._socketIO_thread.start()
+            return True, auth_response
+        else:
+            return False, auth_response
+
+    def _loop(self):
+        while self._socketIO_thread.keepGoing:
+            self.socketIO.wait(1)
+        print "Exiting thread"
+        # self._socketIO_thread = threading.Thread(target=self.socketIO.wait)
+        # self._socketIO_thread.setName(self.user + self.env)
+        # self._socketIO_thread.setDaemon(True)
+        # self._socketIO_thread.start()
+
+    def __exit__(self, *err):
+        pass
+
+    def __enter__(self):
+        return self
 
     def _authenticate(self):
         auth_params = {
@@ -106,7 +130,7 @@ class Trader(object):
     def _log_init(self):
         self.logger = logging.getLogger(self.user + "_" + self.env + "_" +str(uuid.uuid4())[:8])
         self.ch = logging.StreamHandler()
-        self.set_log_level(DEBUGLEVEL)   
+        self.set_log_level(DEBUGLEVEL)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # add formatter to ch
         self.ch.setFormatter(formatter)
@@ -121,6 +145,9 @@ class Trader(object):
         '''
         self.logger.setLevel(LOGLEVELS.get(level, "ERROR"))
         self.ch.setLevel(LOGLEVELS.get(level, "ERROR"))
+
+    def _add_method(self):
+        pass
 
     def on_connect(self):
         '''
@@ -591,15 +618,15 @@ class Trader(object):
                     if not isInt(v):
                         v = int(time.mktime(parse(v).timetuple()))
                     params[k] = v
-                status, candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
-                headers= ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
-                          'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
-                if datetime_fmt is not None:
-                    headers.append("datestring")
-                    for i, candle in enumerate(candle_data['candles']):
-                        candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
-                candle_data['headers'] = headers
-                return status, candle_data
+            status, candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
+            headers= ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
+                      'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
+            if datetime_fmt is not None:
+                headers.append("datestring")
+                for i, candle in enumerate(candle_data['candles']):
+                    candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
+            candle_data['headers'] = headers
+            return status, candle_data
         except Exception as e:
             return False, str(e)
 
