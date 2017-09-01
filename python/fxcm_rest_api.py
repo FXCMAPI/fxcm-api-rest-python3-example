@@ -28,13 +28,22 @@ class Trader(object):
         self.env = environment
         self.purpose = purpose
         if messageHandler is not None:
-            self.message_handler = types.MethodType(messageHandler, self)
+            self.message_handler = self.add_method(messageHandler)
         else:
             self.message_handler = self.on_message
         self._log_init()
         self.list = CONFIG.get('subscription_list', [])
         self.environment = self._get_config(environment)
         #self.login()
+
+    def add_method(self, method):
+        '''
+        Returns a method suitable for addition to the instance. Can be used to override methods without subclassing.
+        self.on_connect = self.add_method(someUserDefinedOnConnectMethodHandler)
+        :param method:
+        :return: instance method
+        '''
+        return types.MethodType(method, self)
 
     def login(self):
         '''
@@ -161,13 +170,17 @@ class Trader(object):
         :return: None
         '''
         self.logger.info('Websocket connected: ' + self.socketIO._engineIO_session.id)
-        status, response = self.send('/trading/subscribe', {'models': self.list})
+        # status, response = self.send('/trading/subscribe', {'models': self.list})
+        status, response = self.subscribe(self.list)
         if status is True:
             for item in self.list:
                 self.socketIO.on(item, self.message_handler)
         else:
             self.logger.error("Error processing request: /trading/subscribe:" + str(response))
         # Obtain and store the list of instruments in the symbol_info dict
+        self.get_offers()
+
+    def get_offers(self):
         status, response = self.get_model("Offer")
         if status is True:
             for item in response['offers']:
@@ -248,7 +261,7 @@ class Trader(object):
         '''
         return self.send("/unsubscribe", {"pairs": instrument})
 
-    def subscribe(self, item):
+    def subscribe(self, item, handler=None):
         '''
         Subscribes to the updates of the data models. Update will be pushed to client via socketIO
         Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order',  'Account',  'Summary',
@@ -257,6 +270,7 @@ class Trader(object):
         :param item:
         :return: status Boolean, response String
         '''
+        handler = handler or self.on_message
         return self.send("/trading/subscribe", {"models": item})
 
     def unsubscribe(self, item):
