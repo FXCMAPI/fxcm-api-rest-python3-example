@@ -48,15 +48,16 @@ class Trader(object):
     def login(self):
         '''
         Once you have an instance, run this method to log in to the service. Do this before any other calls
-        :return: None
+        :return: Dict
         '''
-        status, auth_response = self._authenticate()
-        if status:
-            self.access_token = auth_response
+        auth_response = self._authenticate()
+        if auth_response['_status']:
+            self.access_token = auth_response['data']
             self.socketIO = SocketIO(self.environment.get("trading"), self.environment.get("port"),
                                      params={'access_token': self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
+            self.accounts = self.get_model("Account").get('accounts', {})
             thread_name = self.user + self.env + self.purpose
             for thread in threading.enumerate():
                 if thread.name == thread_name:
@@ -66,9 +67,16 @@ class Trader(object):
             self._socketIO_thread.keepGoing = True
             self._socketIO_thread.setDaemon(True)
             self._socketIO_thread.start()
-            return True, auth_response
+            return self.__return(True, auth_response)
         else:
-            return False, auth_response
+            return self.__return(False, auth_response)
+
+    def logout(self):
+        '''
+        Todo - no documentation yet on server side
+        :return:
+        '''
+        pass
 
     def _loop(self):
         while self._socketIO_thread.keepGoing:
@@ -84,6 +92,14 @@ class Trader(object):
     def __enter__(self):
         return self
 
+    def __return(self, status, data):
+        ret_value = {'_status': status}
+        if type(data) == dict:
+            ret_value.update(data)
+        else:
+            ret_value.update({'data': data})
+        return ret_value
+
     def _authenticate(self):
         auth_params = {
             'client_id': CONFIG.get("authentication", {}).get("client_id"),
@@ -93,22 +109,22 @@ class Trader(object):
             'password': self.password
         }
         post_resp = requests.post(self.environment.get("auth", ""), headers=HEADERS, data=auth_params)
-        data = post_resp.json()
-        tmp_access_token = data["access_token"]
         if post_resp.status_code == 200:
+            data = post_resp.json()
+            tmp_access_token = data["access_token"]
             try:
-                status, response = self.send('/authenticate', {'client_id': 'TRADING',
+                response = self.send('/authenticate', {'client_id': 'TRADING',
                                                                     'access_token': tmp_access_token })
             except Exception as e:
                 status = False
                 self.logger.fatal("Could not authenticate! " + str(e))
-                return status, e
-            if status is True:
-                return True, response["access_token"]
+                return self.__return( status, e)
+            if response['_status'] is True:
+                return self.__return(True, response["access_token"])
             else:
-                return False, "Trading authentication failed. Response code =" + str(response)
+                return self.__return(False, "Trading authentication failed. Response code =" + str(response))
         else:
-            return False, "OAuth2 authentication failed. Response code =" + str(post_resp.status_code)
+            return self.__return(False, "OAuth2 authentication failed. Response code =" + str(post_resp.status_code))
 
     def _send_request(self, method, command, params, additional_headers={}):
         headers = HEADERS
@@ -125,10 +141,29 @@ class Trader(object):
         if rresp.status_code == 200:
             data = rresp.json()
             if data["response"]["executed"] is True:
-                return True, data
-            return False, data["response"]["error"]
+                return self.__return(True, data)
+            return self.__return(False, data["response"]["error"])
         else:
-            return False, rresp.status_code
+            return self.__return(False, rresp.status_code)
+
+
+    def send(self, location, params, method='post', additional_headers={}):
+        '''
+        Method to send REST requests to the API
+
+        :param location: eg. /subscribe
+        :param params:  eg. {"pairs": "USD/JPY"}
+        :param method: GET, POST, DELETE, PATCH
+        :return: response Dict
+        '''
+        try:
+            response = self._send_request(method, location, params, additional_headers)
+            return response
+        except Exception as e:
+            self.logger.error("Failed to send request [%s]: %s" % (params, e))
+            status = False
+            response = str(e)
+            return self.__return(status, response)
 
     def _get_config(self, environment):
         ret =CONFIG.get("environments", {}).get(environment, {})
@@ -171,8 +206,8 @@ class Trader(object):
         '''
         self.logger.info('Websocket connected: ' + self.socketIO._engineIO_session.id)
         # status, response = self.send('/trading/subscribe', {'models': self.list})
-        status, response = self.subscribe(self.list)
-        if status is True:
+        response = self.subscribe(self.list)
+        if response['_status'] is True:
             for item in self.list:
                 self.socketIO.on(item, self.message_handler)
         else:
@@ -181,8 +216,8 @@ class Trader(object):
         self.get_offers()
 
     def get_offers(self):
-        status, response = self.get_model("Offer")
-        if status is True:
+        response = self.get_model("Offer")
+        if response['_status'] is True:
             for item in response['offers']:
                 self.symbol_info[item['currency']] = item
 
@@ -224,29 +259,12 @@ class Trader(object):
         message = json.loads(msg)
         self.updates[message["t"]] = message
 
-    def send(self, location, params, method='post', additional_headers={}):
-        '''
-        Method to send REST requests to the API
-
-        :param location: eg. /subscribe
-        :param params:  eg. {"pairs": "USD/JPY"}
-        :param method: GET, POST, DELETE, PATCH
-        :return: status Boolean, response String
-        '''
-        try:
-            status, response = self._send_request(method, location, params, additional_headers)
-        except Exception as e:
-            self.logger.error("Failed to send request [%s]: %s" % (params, e))
-            status = False
-            response = str(e)
-        return status, response
-
     def subscribe_symbol(self, instrument, handler=None):
         '''
         Subscribe to given instrument
 
         :param instrument:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         handler = handler or self.on_price_update
         self.socketIO.on(instrument, handler)
@@ -257,7 +275,7 @@ class Trader(object):
         Unsubscribe from instrument updates
 
         :param instrument:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/unsubscribe", {"pairs": instrument})
 
@@ -268,7 +286,7 @@ class Trader(object):
         'LeverageProfile', 'Properties'
 
         :param item:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         handler = handler or self.on_message
         return self.send("/trading/subscribe", {"models": item})
@@ -278,7 +296,7 @@ class Trader(object):
         Unsubscribe from model ["Offer","Account","Order","OpenPosition","Summary","Properties"]
 
         :param item:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/unsubscribe", {"models": item})
 
@@ -289,7 +307,7 @@ class Trader(object):
         'Account', 'Properties'
 
         :param item:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/get_model", {"models": item}, "get")
 
@@ -299,7 +317,7 @@ class Trader(object):
 
         :param oldpwd:
         :param newpwd:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/changePassword", {"oldPswd": oldpwd, "newPswd": newpwd, "confirmNewPswd": newpwd})
 
@@ -312,7 +330,7 @@ class Trader(object):
 
 
         :param item:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/permissions", {}, "get")
 
@@ -333,10 +351,10 @@ class Trader(object):
         :param trailing_step: * Optional *
         :param limit: * Optional *
         :param is_in_pips: * Optional *
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         if account_id is None or symbol is None or is_buy is None or amount is None:
-            return False, "Failed to provide mandatory parameters"
+            return self.__return(False, "Failed to provide mandatory parameters")
         params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
                       at_market=at_market, time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
@@ -362,10 +380,10 @@ class Trader(object):
         :param time_in_force:
         :param order_type:
         :param rate: * Optional *
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         if trade_id is None or amount is None or at_market is None or time_in_force is None or order_type is None:
-            return False, "Failed to provide mandatory parameters"
+            return self.__return(False, "Failed to provide mandatory parameters")
         params = dict(trade_id=trade_id, amount=amount, at_market=at_market,
                       time_in_force=time_in_force, order_type=order_type)
         if rate is not None:
@@ -381,10 +399,10 @@ class Trader(object):
         :param range:
         :param amount:
         :param trailing_step: * Optional *
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         if order_id is None or amount is None or rate is None or range is None:
-            return False, "Failed to provide mandatory parameters"
+            return self.__return(False, "Failed to provide mandatory parameters")
         params = dict(order_id=order_id, rate=rate, range=range,
                       amount=amount)
         if trailing_step is not None:
@@ -408,10 +426,10 @@ class Trader(object):
         :param trailing_step: * Optional *
         :param limit: * Optional *
         :param is_in_pips: * Optional *
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         if account_id is None or symbol is None or is_buy is None or amount is None:
-            return False, "Failed to provide mandatory parameters"
+            return self.__return(False, "Failed to provide mandatory parameters")
         params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
                       at_market=at_market, time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
@@ -449,11 +467,11 @@ class Trader(object):
         :param rate:
         :param stop: * Optional *
         :param trailing_step: * Optional *
-        :return: status Boolean, response String
+        :return: response Dict
         """
         if account_id is None or symbol is None or is_buy is None or amount is None or limit is None or \
                 is_in_pips is None or order_type is None or time_in_force is None:
-            return False, "Failed to provide mandatory parameters"
+            return self.__return(False, "Failed to provide mandatory parameters")
         params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, limit=limit,
                       is_in_pips=is_in_pips, time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
@@ -489,16 +507,16 @@ class Trader(object):
         :param trailing_step2:
         :param trailing_stop_step2:
         :param limit2:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         params = {}
         try:
             for k, v in locals().iteritems():
                 if k != "self":
                     params[k] = v
-            return self.send("/trading/simple_oco", params)
+            return self.__return(self.send("/trading/simple_oco", params))
         except Exception as e:
-            return False, str(e)
+            return (False, str(e))
 
     def add_to_oco(self, orderIds, ocoBulkId):
         '''
@@ -506,7 +524,7 @@ class Trader(object):
 
         :param orderIds:
         :param ocoBulkId:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/add_to_oco", {"orderIds": orderIds, "ocoBulkId": ocoBulkId})
 
@@ -515,7 +533,7 @@ class Trader(object):
         Remove order(s) from OCO
 
         :param orderIds:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/remove_from_oco", {"orderIds": orderIds})
 
@@ -526,7 +544,7 @@ class Trader(object):
         :param ocoBulkId:
         :param addOrderIds:
         :param removeOrderIds:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         return self.send("/trading/edit_oco", {"ocoBulkId": ocoBulkId, "addOrderIds": addOrderIds,
                                                "removeOrderIds": removeOrderIds})
@@ -545,7 +563,7 @@ class Trader(object):
         :param rate:
         :param is_in_pips:
         :param trailing_step:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         params = {}
         try:
@@ -554,7 +572,7 @@ class Trader(object):
                     params[k] = v
             return self.send("/trading/change_trail_stop_limit", params)
         except Exception as e:
-            return False, str(e)
+            return self.__return(False, str(e))
 
     def change_order_stop_limit(self, order_id, is_stop, rate, is_in_pips, trailing_step):
         '''
@@ -570,7 +588,7 @@ class Trader(object):
         :param rate:
         :param is_in_pips:
         :param trailing_step:
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         params = {}
         try:
@@ -579,7 +597,7 @@ class Trader(object):
                     params[k] = v
             return self.send("/trading/change_order_stop_limit", params)
         except Exception as e:
-            return False, str(e)
+            return self.__return(False, str(e))
 
     def close_all_for_symbol(self, account_id, forSymbol, symbol, order_type, time_in_force):
         '''
@@ -591,7 +609,7 @@ class Trader(object):
         :param symbol:
         :param order_type: AtMarket / MarketRange
         :param time_in_force: IOC GTC FOK DAY GTD
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         params = {}
         try:
@@ -600,7 +618,7 @@ class Trader(object):
                     params[k] = v
             return self.send("/trading/close_all_for_symbol", params)
         except Exception as e:
-            return False, str(e)
+            return self.__return(False, str(e))
     #
     # def candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
     #     return self.get_candles(instrument, period, num, From=None, To=None, datetime_fmt=None)
@@ -619,7 +637,7 @@ class Trader(object):
         timestamp converted to the datetime string provided. Example:
         .candles("USD/JPY", "m1", 3, datetime_fmt="%Y/%m/%d %H:%M:%S:%f")
         [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359, 109.358, 109.362, 109.357, 28, '2017/08/26 05:57:00:000000']
-        :return: status Boolean, response String
+        :return: response Dict
         '''
         try:
             initial_instrument = instrument
@@ -643,9 +661,9 @@ class Trader(object):
                 for i, candle in enumerate(candle_data['candles']):
                     candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
             candle_data['headers'] = headers
-            return status, candle_data
+            return self.__return(status, candle_data)
         except Exception as e:
-            return False, str(e)
+            return (False, str(e))
 
     candles = get_candles
 
@@ -656,9 +674,9 @@ class Trader(object):
                 Headers = namedtuple('Headers', candle_data['headers'])
                 candle_dict = map(Headers._make, candle_data['candles'])
                 candle_data['candles'] = candle_dict
-            return status, candle_data
+            return self.__return(status, candle_data)
         except Exception as e:
-            return False, str(e)
+            return self.__return(False, str(e))
 
 
 
