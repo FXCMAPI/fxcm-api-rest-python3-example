@@ -9,10 +9,18 @@ from dateutil.parser import parse
 from datetime import datetime
 import time
 import types
+from pprint import pprint
 
 def isInt(v):
     v = str(v).strip()
     return v=='0' or (v if v.find('..') > -1 else v.lstrip('-+').rstrip('0').rstrip('.')).isdigit()
+
+# PriceUpdate = namedtuple('PriceUpdate', ['bid', 'ask', 'high', 'low', 'updated'])
+
+class PriceUpdate(object):
+    def __init__(self):
+        pass
+
 
 class Trader(object):
     '''FXCM REST API abstractor.
@@ -23,6 +31,12 @@ class Trader(object):
         self.updates = {}
         self.symbols = {}
         self.symbol_info = {}
+        self.account_list = []
+        self.orders = {}
+        self.trades = {}
+        self.open_positions = []
+        self.closed_positions= []
+        self.currency_exposure = {}
         self.user = user
         self.password = password
         self.env = environment
@@ -57,7 +71,12 @@ class Trader(object):
                                      params={'access_token': self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
-            self.accounts = self.get_model("Account").get('accounts', {})
+            self.accounts = {}
+            accounts = self.get_model("Account").get('accounts', {})
+            self.account_list = [a['accountId'] for a in accounts]
+            for account in accounts:
+                self.accounts[account['accountId']] = account
+
             thread_name = self.user + self.env + self.purpose
             for thread in threading.enumerate():
                 if thread.name == thread_name:
@@ -207,11 +226,6 @@ class Trader(object):
         self.logger.info('Websocket connected: ' + self.socketIO._engineIO_session.id)
         # status, response = self.send('/trading/subscribe', {'models': self.list})
         response = self.subscribe(self.list)
-        if response['_status'] is True:
-            for item in self.list:
-                self.socketIO.on(item, self.message_handler)
-        else:
-            self.logger.error("Error processing request: /trading/subscribe:" + str(response))
         # Obtain and store the list of instruments in the symbol_info dict
         self.get_offers()
 
@@ -247,8 +261,18 @@ class Trader(object):
 
         :return: none
         '''
-        md = json.loads(msg)
-        self.symbols[md["Symbol"]] = md
+        try:
+            md = json.loads(msg)
+            symbol = md["Symbol"]
+            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate())
+            self.symbols[symbol].bid, self.symbols[symbol].ask, self.symbols[symbol].high, self.symbols[symbol].low =\
+                md['Rates']
+            self.symbols[symbol].updated = md['Updated']
+            # self.symbols[symbol] = PriceUpdate(*(md['Rates'] + [md['Updated']]))
+
+            #self.symbols[md["Symbol"]] = md
+        except Exception as e:
+            self.logger.error("Can't handle price update: " +  str(e))
 
     def on_message(self, msg):
         '''
@@ -257,7 +281,35 @@ class Trader(object):
         :return:
         '''
         message = json.loads(msg)
-        self.updates[message["t"]] = message
+        msg_type = message['t']
+        if msg_type == 6:
+            account_id = message['accountId']
+            self.accounts[account_id].update(message)
+        elif msg_type in [3, 5]:
+            if message.has_key("action"):
+                order_id = message.get("orderId", "")
+                if order_id not in self.open_positions and msg_type == 3:
+                    self.open_positions.append(order_id)
+                if order_id not in self.closed_positions and msg_type == 5:
+                    try:
+                        self.open_positions.remove(order_id)
+                    except Exception:
+                        pass
+                    self.closed_positions.append(order_id)
+                self.orders[order_id] = self.orders.get(order_id, [])
+                self.orders[order_id].append(message)
+        elif msg_type == 1:
+            if message.has_key("currency"):
+                currency = message['currency']
+                self.currency_exposure[currency] = {message['accountId']: message}
+            elif message.has_key("tradeId"):
+                self.trades[message['tradeId']] = self.trades.get(message['tradeId'], {})
+                self.trades[message['tradeId']].update(message)
+            else:
+                print "**********************"
+                print(message)
+                print "----------------------\n"
+                self.updates[message["t"]] = message
 
     def subscribe_symbol(self, instrument, handler=None):
         '''
@@ -270,16 +322,21 @@ class Trader(object):
         self.socketIO.on(instrument, handler)
         return self.send("/subscribe", {"pairs": instrument}, additional_headers={'Transfer-Encoding': "chunked"})
 
-    def unsubscribe_symbol(self, instrument, additional_headers={'Transfer-Encoding': "chunked"}):
+    def unsubscribe_symbol(self, instruments, additional_headers={'Transfer-Encoding': "chunked"}):
         '''
         Unsubscribe from instrument updates
 
-        :param instrument:
+        :param instruments:
         :return: response Dict
         '''
-        return self.send("/unsubscribe", {"pairs": instrument})
+        if type(instruments) is list:
+            for instrument in instruments:
+                self.socketIO.off(instrument)
+        else:
+            self.socketIO.off(instruments)
+        return self.send("/unsubscribe", {"pairs": instruments})
 
-    def subscribe(self, item, handler=None):
+    def subscribe(self, items, handler=None):
         '''
         Subscribes to the updates of the data models. Update will be pushed to client via socketIO
         Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order',  'Account',  'Summary',
@@ -289,7 +346,17 @@ class Trader(object):
         :return: response Dict
         '''
         handler = handler or self.on_message
-        return self.send("/trading/subscribe", {"models": item})
+
+        response = self.send("/trading/subscribe", {"models": items})
+        if response['_status'] is True:
+            if type(items) is list:
+                for item in items:
+                    self.socketIO.on(item, handler)
+            else:
+                self.socketIO.on(items, handler)
+        else:
+            self.logger.error("Error processing request: /trading/subscribe:" + str(response))
+        return response
 
     def unsubscribe(self, item):
         '''
@@ -355,6 +422,9 @@ class Trader(object):
         '''
         if account_id is None or symbol is None or is_buy is None or amount is None:
             return self.__return(False, "Failed to provide mandatory parameters")
+
+        is_buy = 'true' if is_buy else 'false'
+        print is_buy
         params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
                       at_market=at_market, time_in_force=time_in_force, order_type=order_type)
         if stop is not None:

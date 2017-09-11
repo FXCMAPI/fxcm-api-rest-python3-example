@@ -4,7 +4,7 @@ trader = fxcm_rest_api.Trader('username', 'password', 'environment')
 trader.login()
 try:
     print("Logged in, now getting Account details")
-    account_id = trader.accounts[0]['accountId']
+    account_id = trader.account_list[0]
     print("Opening a trade now -USD/JPY 10 lots on %s"  % account_id)
     response = trader.open_trade(account_id, "USD/JPY", True, 10)
     if response['_status'] is True:
