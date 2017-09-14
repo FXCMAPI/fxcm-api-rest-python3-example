@@ -17,10 +17,46 @@ def isInt(v):
 
 # PriceUpdate = namedtuple('PriceUpdate', ['bid', 'ask', 'high', 'low', 'updated'])
 
-class PriceUpdate(object):
-    def __init__(self):
-        pass
+def timestamp_to_string(timestamp, datetime_fmt="%Y/%m/%d %H:%M:%S:%f"):
+    return datetime.fromtimestamp(timestamp).strftime(datetime_fmt)
 
+class PriceUpdate(object):
+    def __init__(self, bid=None, ask=None, high=None, low=None, updated=None, symbol_info=None, parent=None):
+        self.bid=bid
+        self.ask=ask
+        self.high=high
+        self.low=low
+        self.updated=updated
+        self.output_fmt = "%r"
+        self.parent = parent
+        if symbol_info is not None:
+            self.symbol_info = symbol_info
+            self.offer_id = symbol_info['offerId']
+            self.symbol = symbol_info['currency']
+            precision = symbol_info['ratePrecision']  / 10.0
+            self.output_fmt = "%s%0.1ff" % ("%", precision)
+
+    def __repr__(self):
+        try:
+            date = timestamp_to_string(self.updated)
+        except:
+            date = None
+        output = "PriceUpdate(bid={0}, ask={0}, high={0}, low={0}, updated=%r)".format(self.output_fmt)
+        return output % (self.bid, self.ask, self.high,
+                                                                             self.low, date)
+
+    def __print__(self):
+        try:
+            date = timestamp_to_string(self.updated)
+        except:
+            date = None
+        return "[%s => bid=%s, ask=%s, high=%s, low=%s]" % (self.bid, self.ask, self.high, self.low, date)
+
+    def unsubscribe(self):
+        return self.parent.unsubscribe_symbol(self.symbol)
+
+    def resubscribe(self):
+        return self.parent.subscribe_symbol(self.symbol)
 
 class Trader(object):
     '''FXCM REST API abstractor.
@@ -31,6 +67,7 @@ class Trader(object):
         self.updates = {}
         self.symbols = {}
         self.symbol_info = {}
+        self.symbol_id = {}
         self.account_list = []
         self.orders = {}
         self.trades = {}
@@ -41,6 +78,17 @@ class Trader(object):
         self.password = password
         self.env = environment
         self.purpose = purpose
+
+        # for debugging - allows the suppression of specific messages sent to self.Print.
+        # helpful for when logging to console and you want to keep log level, but remove some messages from the output
+        self.ignore_output = []
+        #####
+
+        self.update_handlers = {"Offer": self.on_offer,"Account": self.on_account, "Order": self.on_order,
+                                "OpenPosition": self.on_openposition, "ClosedPosition": self.on_closedposition,
+                                "Summary": self.on_summary, "LeverageProfile": self.on_leverageprofile,
+                                "Properties": self.on_properties}
+
         if messageHandler is not None:
             self.message_handler = self.add_method(messageHandler)
         else:
@@ -49,6 +97,12 @@ class Trader(object):
         self.list = CONFIG.get('subscription_list', [])
         self.environment = self._get_config(environment)
         #self.login()
+
+    def Print(self, message, message_type=None, level='INFO'):
+        loggers = dict(INFO=self.logger.info, DEBUG=self.logger.debug, WARNING=self.logger.warning,
+                       ERROR=self.logger.error, CRITICAL=self.logger.critical)
+        if message_type is None or message_type not in self.ignore_output:
+            loggers[level](message)
 
     def add_method(self, method):
         '''
@@ -59,13 +113,40 @@ class Trader(object):
         '''
         return types.MethodType(method, self)
 
+    def _authenticate(self):
+        auth_params = {
+            'client_id': CONFIG.get("authentication", {}).get("client_id"),
+            'client_secret': CONFIG.get("authentication", {}).get("client_secret"),
+            'grant_type': 'password',
+            'username': self.user,
+            'password': self.password
+        }
+        post_resp = requests.post(self.environment.get("auth", ""), headers=HEADERS, data=auth_params)
+        if post_resp.status_code == 200:
+            data = post_resp.json()
+            tmp_access_token = data["access_token"]
+            try:
+                response = self.send('/authenticate', {'client_id': 'TRADING',
+                                                                    'access_token': tmp_access_token })
+            except Exception as e:
+                status = False
+                self.logger.fatal("Could not authenticate! " + str(e))
+                return self.__return( status, e)
+            if response['status'] is True:
+                return self.__return(True, response["access_token"])
+            else:
+                return self.__return(False, "Trading authentication failed. Response code =" + str(response))
+        else:
+            return self.__return(False, "OAuth2 authentication failed. Response code =" + str(post_resp.status_code))
+
+
     def login(self):
         '''
         Once you have an instance, run this method to log in to the service. Do this before any other calls
         :return: Dict
         '''
         auth_response = self._authenticate()
-        if auth_response['_status']:
+        if auth_response['status']:
             self.access_token = auth_response['data']
             self.socketIO = SocketIO(self.environment.get("trading"), self.environment.get("port"),
                                      params={'access_token': self.access_token})
@@ -112,38 +193,12 @@ class Trader(object):
         return self
 
     def __return(self, status, data):
-        ret_value = {'_status': status}
+        ret_value = {'status': status}
         if type(data) == dict:
             ret_value.update(data)
         else:
             ret_value.update({'data': data})
         return ret_value
-
-    def _authenticate(self):
-        auth_params = {
-            'client_id': CONFIG.get("authentication", {}).get("client_id"),
-            'client_secret': CONFIG.get("authentication", {}).get("client_secret"),
-            'grant_type': 'password',
-            'username': self.user,
-            'password': self.password
-        }
-        post_resp = requests.post(self.environment.get("auth", ""), headers=HEADERS, data=auth_params)
-        if post_resp.status_code == 200:
-            data = post_resp.json()
-            tmp_access_token = data["access_token"]
-            try:
-                response = self.send('/authenticate', {'client_id': 'TRADING',
-                                                                    'access_token': tmp_access_token })
-            except Exception as e:
-                status = False
-                self.logger.fatal("Could not authenticate! " + str(e))
-                return self.__return( status, e)
-            if response['_status'] is True:
-                return self.__return(True, response["access_token"])
-            else:
-                return self.__return(False, "Trading authentication failed. Response code =" + str(response))
-        else:
-            return self.__return(False, "OAuth2 authentication failed. Response code =" + str(post_resp.status_code))
 
     def _send_request(self, method, command, params, additional_headers={}):
         headers = HEADERS
@@ -225,15 +280,21 @@ class Trader(object):
         '''
         self.logger.info('Websocket connected: ' + self.socketIO._engineIO_session.id)
         # status, response = self.send('/trading/subscribe', {'models': self.list})
-        response = self.subscribe(self.list)
-        # Obtain and store the list of instruments in the symbol_info dict
+        for item in self.list:
+            handler = self.update_handlers.get(item, None)
+            if handler is None:
+                response = self.subscribe(item)
+            else:
+                response = self.subscribe(item, handler)
+# Obtain and store the list of instruments in the symbol_info dict
         self.get_offers()
 
     def get_offers(self):
         response = self.get_model("Offer")
-        if response['_status'] is True:
+        if response['status'] is True:
             for item in response['offers']:
                 self.symbol_info[item['currency']] = item
+                self.symbol_id[item['offerId']] = item['currency']
 
     def on_disconnect(self):
         '''
@@ -264,7 +325,8 @@ class Trader(object):
         try:
             md = json.loads(msg)
             symbol = md["Symbol"]
-            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate())
+            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate(symbol_info=self.symbol_info[symbol],
+                                                                        parent=self))
             self.symbols[symbol].bid, self.symbols[symbol].ask, self.symbols[symbol].high, self.symbols[symbol].low =\
                 md['Rates']
             self.symbols[symbol].updated = md['Updated']
@@ -274,6 +336,49 @@ class Trader(object):
         except Exception as e:
             self.logger.error("Can't handle price update: " +  str(e))
 
+    def on_offer(self, msg):
+        message = json.loads(msg)
+        self.Print("Offer Update:" + msg, "Offer", "INFO")
+
+    def on_account(self, msg):
+        message = json.loads(msg)
+        account_id = message['accountId']
+        self.accounts[account_id] = self.accounts.get(account_id, {})
+        self.accounts[account_id].update(message)
+        # self.Print("Account Update:" + msg, "Account", "INFO")
+
+    def on_order(self, msg):
+        message = json.loads(msg)
+        order_id = message.get('orderId', '')
+        self.orders[order_id] = self.orders.get(order_id, {'actions': []})
+        if message.has_key("action"):
+            self.orders[order_id]['actions'].append(message)
+        self.orders[order_id].update(message)
+        self.Print("Order Update:" + msg, "Order", "INFO")
+
+    def on_openposition(self, msg):
+        message = json.loads(msg)
+        self.Print("OpenPosition Update:" + msg, "OpenPosition", "INFO")
+
+    def on_closedposition(self, msg):
+        message = json.loads(msg)
+        self.Print("ClosedPosition Update:" + msg, "ClosedPosition", "INFO")
+
+
+    def on_summary(self, msg):
+        message = json.loads(msg)
+        self.Print("Summary Update:" + msg, "Summary", "INFO")
+
+    def on_properties(self, msg):
+        message = json.loads(msg)
+        if message.has_key("offerId"):
+            message['symbol'] = self.symbol_id[message['offerId']]
+        self.Print("Property Update:" + msg, "Property", "INFO")
+
+    def on_leverageprofile(self, msg):
+        message = json.loads(msg)
+        self.Print("LeverageProfile Update:" + msg, "LeverageProfile", "INFO")
+
     def on_message(self, msg):
         '''
         Sample generic message handling. Will update that specific message type with the latest message
@@ -282,10 +387,7 @@ class Trader(object):
         '''
         message = json.loads(msg)
         msg_type = message['t']
-        if msg_type == 6:
-            account_id = message['accountId']
-            self.accounts[account_id].update(message)
-        elif msg_type in [3, 5]:
+        if msg_type in [3, 5]:
             if message.has_key("action"):
                 order_id = message.get("orderId", "")
                 if order_id not in self.open_positions and msg_type == 3:
@@ -306,9 +408,9 @@ class Trader(object):
                 self.trades[message['tradeId']] = self.trades.get(message['tradeId'], {})
                 self.trades[message['tradeId']].update(message)
             else:
-                print "**********************"
+                print("**********************")
                 print(message)
-                print "----------------------\n"
+                print("----------------------\n")
                 self.updates[message["t"]] = message
 
     def subscribe_symbol(self, instrument, handler=None):
@@ -348,7 +450,7 @@ class Trader(object):
         handler = handler or self.on_message
 
         response = self.send("/trading/subscribe", {"models": items})
-        if response['_status'] is True:
+        if response['status'] is True:
             if type(items) is list:
                 for item in items:
                     self.socketIO.on(item, handler)
@@ -424,7 +526,7 @@ class Trader(object):
             return self.__return(False, "Failed to provide mandatory parameters")
 
         is_buy = 'true' if is_buy else 'false'
-        print is_buy
+        print(is_buy)
         params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
                       at_market=at_market, time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
@@ -723,7 +825,7 @@ class Trader(object):
                     if not isInt(v):
                         v = int(time.mktime(parse(v).timetuple()))
                     params[k] = v
-            status, candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
+            candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
             headers= ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
                       'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
             if datetime_fmt is not None:
@@ -731,7 +833,7 @@ class Trader(object):
                 for i, candle in enumerate(candle_data['candles']):
                     candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
             candle_data['headers'] = headers
-            return self.__return(status, candle_data)
+            return self.__return(candle_data['status'], candle_data)
         except Exception as e:
             return (False, str(e))
 
@@ -739,7 +841,8 @@ class Trader(object):
 
     def candles_as_dict(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
         try:
-            status, candle_data = self.get_candles(instrument, period, num, From, To, datetime_fmt)
+            candle_data = self.get_candles(instrument, period, num, From, To, datetime_fmt)
+            status = candle_data['status']
             if status == True:
                 Headers = namedtuple('Headers', candle_data['headers'])
                 candle_dict = map(Headers._make, candle_data['candles'])
