@@ -9,48 +9,52 @@ from dateutil.parser import parse
 from datetime import datetime
 import time
 import types
-from pprint import pprint
+
 
 def isInt(v):
     v = str(v).strip()
-    return v=='0' or (v if v.find('..') > -1 else v.lstrip('-+').rstrip('0').rstrip('.')).isdigit()
+    return v == '0' or (v if v.find('..') > -1 else v.lstrip('-+').rstrip('0')
+                                                     .rstrip('.')).isdigit()
 
-# PriceUpdate = namedtuple('PriceUpdate', ['bid', 'ask', 'high', 'low', 'updated'])
 
 def timestamp_to_string(timestamp, datetime_fmt="%Y/%m/%d %H:%M:%S:%f"):
     return datetime.fromtimestamp(timestamp).strftime(datetime_fmt)
 
+
 class PriceUpdate(object):
-    def __init__(self, bid=None, ask=None, high=None, low=None, updated=None, symbol_info=None, parent=None):
-        self.bid=bid
-        self.ask=ask
-        self.high=high
-        self.low=low
-        self.updated=updated
+    def __init__(self, bid=None, ask=None, high=None, low=None, updated=None,
+                 symbol_info=None, parent=None):
+        self.bid = bid
+        self.ask = ask
+        self.high = high
+        self.low = low
+        self.updated = updated
         self.output_fmt = "%r"
         self.parent = parent
         if symbol_info is not None:
             self.symbol_info = symbol_info
             self.offer_id = symbol_info['offerId']
             self.symbol = symbol_info['currency']
-            precision = symbol_info['ratePrecision']  / 10.0
+            precision = symbol_info['ratePrecision'] / 10.0
             self.output_fmt = "%s%0.1ff" % ("%", precision)
 
     def __repr__(self):
         try:
             date = timestamp_to_string(self.updated)
-        except:
+        except Exception:
             date = None
-        output = "PriceUpdate(bid={0}, ask={0}, high={0}, low={0}, updated=%r)".format(self.output_fmt)
+        output = "PriceUpdate(bid={0}, ask={0}, \
+                 high={0}, low={0}, updated=%r)".format(self.output_fmt)
         return output % (self.bid, self.ask, self.high,
-                                                                             self.low, date)
+                         self.low, date)
 
     def __print__(self):
         try:
             date = timestamp_to_string(self.updated)
-        except:
+        except Exception:
             date = None
-        return "[%s => bid=%s, ask=%s, high=%s, low=%s]" % (self.bid, self.ask, self.high, self.low, date)
+        return "[%s => bid=%s, ask=%s, high=%s, low=%s]" % \
+               (self.bid, self.ask, self.high, self.low, date)
 
     def unsubscribe(self):
         return self.parent.unsubscribe_symbol(self.symbol)
@@ -58,11 +62,15 @@ class PriceUpdate(object):
     def resubscribe(self):
         return self.parent.subscribe_symbol(self.symbol)
 
+
 class Trader(object):
     '''FXCM REST API abstractor.
-    Obtain a new instance of this class and use that to do all trade and account actions.
+    Obtain a new instance of this class and use that
+    to do all trade and account actions.
     '''
-    def __init__(self, user, password, environment, messageHandler=None, purpose='General'):
+
+    def __init__(self, user, password, environment, messageHandler=None,
+                 purpose='General'):
         self.socketIO = None
         self.updates = {}
         self.symbols = {}
@@ -72,21 +80,26 @@ class Trader(object):
         self.orders = {}
         self.trades = {}
         self.open_positions = []
-        self.closed_positions= []
+        self.closed_positions = []
         self.currency_exposure = {}
         self.user = user
         self.password = password
         self.env = environment
         self.purpose = purpose
 
-        # for debugging - allows the suppression of specific messages sent to self.Print.
-        # helpful for when logging to console and you want to keep log level, but remove some messages from the output
+        # for debugging - allows the suppression of specific messages
+        # sent to self.Print.Helpful for when logging to console and
+        # you want to keep log level, but remove some messages from the output
         self.ignore_output = []
         #####
 
-        self.update_handlers = {"Offer": self.on_offer,"Account": self.on_account, "Order": self.on_order,
-                                "OpenPosition": self.on_openposition, "ClosedPosition": self.on_closedposition,
-                                "Summary": self.on_summary, "LeverageProfile": self.on_leverageprofile,
+        self.update_handlers = {"Offer": self.on_offer,
+                                "Account": self.on_account,
+                                "Order": self.on_order,
+                                "OpenPosition": self.on_openposition,
+                                "ClosedPosition": self.on_closedposition,
+                                "Summary": self.on_summary,
+                                "LeverageProfile": self.on_leverageprofile,
                                 "Properties": self.on_properties}
 
         if messageHandler is not None:
@@ -96,18 +109,20 @@ class Trader(object):
         self._log_init()
         self.list = CONFIG.get('subscription_list', [])
         self.environment = self._get_config(environment)
-        #self.login()
+        # self.login()
 
     def Print(self, message, message_type=None, level='INFO'):
-        loggers = dict(INFO=self.logger.info, DEBUG=self.logger.debug, WARNING=self.logger.warning,
-                       ERROR=self.logger.error, CRITICAL=self.logger.critical)
+        loggers = dict(INFO=self.logger.info, DEBUG=self.logger.debug,
+                       WARNING=self.logger.warning, ERROR=self.logger.error,
+                       CRITICAL=self.logger.critical)
         if message_type is None or message_type not in self.ignore_output:
             loggers[level](message)
 
     def add_method(self, method):
         '''
-        Returns a method suitable for addition to the instance. Can be used to override methods without subclassing.
-        self.on_connect = self.add_method(someUserDefinedOnConnectMethodHandler)
+        Returns a method suitable for addition to the instance.
+        Can be used to override methods without subclassing.
+        self.on_connect = self.add_method(MyConnectMethodHandler)
         :param method:
         :return: instance method
         '''
@@ -116,40 +131,48 @@ class Trader(object):
     def _authenticate(self):
         auth_params = {
             'client_id': CONFIG.get("authentication", {}).get("client_id"),
-            'client_secret': CONFIG.get("authentication", {}).get("client_secret"),
+            'client_secret': CONFIG.get("authentication", {})
+            .get("client_secret"),
             'grant_type': 'password',
             'username': self.user,
             'password': self.password
         }
-        post_resp = requests.post(self.environment.get("auth", ""), headers=HEADERS, data=auth_params)
+        post_resp = requests.post(self.environment.get(
+            "auth", ""), headers=HEADERS, data=auth_params)
         if post_resp.status_code == 200:
             data = post_resp.json()
             tmp_access_token = data["access_token"]
             try:
-                response = self.send('/authenticate', {'client_id': 'TRADING',
-                                                                    'access_token': tmp_access_token })
+                response = self.send('/authenticate',
+                                     {'client_id': 'TRADING',
+                                      'access_token': tmp_access_token})
             except Exception as e:
                 status = False
                 self.logger.fatal("Could not authenticate! " + str(e))
-                return self.__return( status, e)
+                return self.__return(status, e)
             if response['status'] is True:
                 return self.__return(True, response["access_token"])
             else:
-                return self.__return(False, "Trading authentication failed. Response code =" + str(response))
+                return self.__return(False, "Trading authentication failed. \
+                                             Response code =" + str(response))
         else:
-            return self.__return(False, "OAuth2 authentication failed. Response code =" + str(post_resp.status_code))
-
+            return self.__return(False, "OAuth2 authentication failed. \
+                                         Response code =" +
+                                        str(post_resp.status_code))
 
     def login(self):
         '''
-        Once you have an instance, run this method to log in to the service. Do this before any other calls
+        Once you have an instance, run this method to log in to the service.
+        Do this before any other calls
         :return: Dict
         '''
         auth_response = self._authenticate()
         if auth_response['status']:
             self.access_token = auth_response['data']
-            self.socketIO = SocketIO(self.environment.get("trading"), self.environment.get("port"),
-                                     params={'access_token': self.access_token})
+            self.socketIO = SocketIO(self.environment.get("trading"),
+                                     self.environment.get("port"),
+                                     params={'access_token':
+                                             self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
             self.accounts = {}
@@ -202,16 +225,19 @@ class Trader(object):
 
     def _send_request(self, method, command, params, additional_headers={}):
         headers = HEADERS
-        headers['User-Agent'] =  'request'
+        headers['User-Agent'] = 'request'
         # headers.update(additional_headers)
-        if self.socketIO != None and self.socketIO.connected:
+        if self.socketIO is not None and self.socketIO.connected:
             params["socket_id"] = self.socketIO._engineIO_session.id
             params["access_token"] = self.access_token
-        self.logger.info( self.environment.get("trading")  + command + str(params))
+        self.logger.info(self.environment.get(
+            "trading") + command + str(params))
         if method == 'get':
-            rresp = requests.get(self.environment.get("trading")  + command, params=params)
+            rresp = requests.get(self.environment.get(
+                "trading") + command, params=params)
         else:
-            rresp = requests.post(self.environment.get("trading") + command, headers=headers, data=params)
+            rresp = requests.post(self.environment.get(
+                "trading") + command, headers=headers, data=params)
         if rresp.status_code == 200:
             data = rresp.json()
             if data["response"]["executed"] is True:
@@ -219,7 +245,6 @@ class Trader(object):
             return self.__return(False, data["response"]["error"])
         else:
             return self.__return(False, rresp.status_code)
-
 
     def send(self, location, params, method='post', additional_headers={}):
         '''
@@ -231,7 +256,8 @@ class Trader(object):
         :return: response Dict
         '''
         try:
-            response = self._send_request(method, location, params, additional_headers)
+            response = self._send_request(
+                method, location, params, additional_headers)
             return response
         except Exception as e:
             self.logger.error("Failed to send request [%s]: %s" % (params, e))
@@ -240,24 +266,29 @@ class Trader(object):
             return self.__return(status, response)
 
     def _get_config(self, environment):
-        ret =CONFIG.get("environments", {}).get(environment, {})
+        ret = CONFIG.get("environments", {}).get(environment, {})
         if ret == {}:
-            self.logger.error("No configuration found. Please call your trade object with 'get_config(environment)'.")
+            self.logger.error(
+                "No configuration found. Please call your trade object with\
+                 'get_config(environment)'.")
             self.logger.error("Environments are prod, dev or qa.")
         return ret
 
     def _log_init(self):
-        self.logger = logging.getLogger(self.user + "_" + self.env + "_" +str(uuid.uuid4())[:8])
+        self.logger = logging.getLogger(
+            self.user + "_" + self.env + "_" + str(uuid.uuid4())[:8])
         self.ch = logging.StreamHandler()
         self.set_log_level(DEBUGLEVEL)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # add formatter to ch
         self.ch.setFormatter(formatter)
         self.logger.addHandler(self.ch)
 
     def set_log_level(self, level):
         '''
-        set the logging level of the specific instance. Levels are DEBUG, INFO, WARNING, ERROR, CRITICAL
+        set the logging level of the specific instance.
+        Levels are DEBUG, INFO, WARNING, ERROR, CRITICAL
         :param level: Defaults to ERROR if log level is undefined
 
         :return: None
@@ -270,22 +301,25 @@ class Trader(object):
 
     def on_connect(self):
         '''
-        Actions to be preformed on login. By default will subscribe to updates for items defined in subscription_list
-        subscription_list is in the json config with options explained there
-        If messageHandler was passed on instantiation, that will be used to handle all messages.
-        Alternatively, this method can be overridden before login is called to provide different on_connect
-        functionality.
+        Actions to be preformed on login. By default will subscribe to updates
+        for items defined in subscription_list. subscription_list is in the
+        json config with options explained there. If messageHandler was passed
+        on instantiation, that will be used to handle all messages.
+        Alternatively, this method can be overridden before login is called to
+        provide different on_connect functionality.
 
         :return: None
         '''
-        self.logger.info('Websocket connected: ' + self.socketIO._engineIO_session.id)
-        # status, response = self.send('/trading/subscribe', {'models': self.list})
+        self.logger.info('Websocket connected: ' +
+                         self.socketIO._engineIO_session.id)
+        # status, response = self.send('/trading/subscribe',
+        #                              {'models': self.list})
         for item in self.list:
             handler = self.update_handlers.get(item, None)
             if handler is None:
-                response = self.subscribe(item)
+                self.subscribe(item)
             else:
-                response = self.subscribe(item, handler)
+                self.subscribe(item, handler)
 # Obtain and store the list of instruments in the symbol_info dict
         self.get_offers()
 
@@ -298,7 +332,8 @@ class Trader(object):
 
     def on_disconnect(self):
         '''
-        Simply logs info of the socket being closed. Override to add functionality
+        Simply logs info of the socket being closed.
+        Override to add functionality
 
         :return: None
         '''
@@ -316,29 +351,27 @@ class Trader(object):
 
     def on_price_update(self, msg):
         '''
-        Sample price handler. If on_price_update is registered for a symbol, it will update the symbol's values (stored
-        in a symbol hash) with that price update.
-        symbol hash.
+        Sample price handler. If on_price_update is registered for a symbol,
+        it will update the symbol's values (stored in a symbol hash) with
+        that price update.symbol hash.
 
         :return: none
         '''
         try:
             md = json.loads(msg)
             symbol = md["Symbol"]
-            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate(symbol_info=self.symbol_info[symbol],
-                                                                        parent=self))
-            self.symbols[symbol].bid, self.symbols[symbol].ask, self.symbols[symbol].high, self.symbols[symbol].low =\
-                md['Rates']
+            p_up = dict(symbol_info=self.symbol_info[symbol], parent=self)
+            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate(p_up))
+            self.symbols[symbol].bid, self.symbols[symbol].ask,\
+                self.symbols[symbol].high,\
+                self.symbols[symbol].low = md['Rates']
             self.symbols[symbol].updated = md['Updated']
-            # self.symbols[symbol] = PriceUpdate(*(md['Rates'] + [md['Updated']]))
-
-            #self.symbols[md["Symbol"]] = md
         except Exception as e:
-            self.logger.error("Can't handle price update: " +  str(e))
+            self.logger.error("Can't handle price update: " + str(e))
 
     def on_offer(self, msg):
         message = json.loads(msg)
-        self.Print("Offer Update:" + msg, "Offer", "INFO")
+        self.Print("Offer Update:" + message, "Offer", "INFO")
 
     def on_account(self, msg):
         message = json.loads(msg)
@@ -351,44 +384,46 @@ class Trader(object):
         message = json.loads(msg)
         order_id = message.get('orderId', '')
         self.orders[order_id] = self.orders.get(order_id, {'actions': []})
-        if message.has_key("action"):
+        if "action" in message:
             self.orders[order_id]['actions'].append(message)
         self.orders[order_id].update(message)
         self.Print("Order Update:" + msg, "Order", "INFO")
 
     def on_openposition(self, msg):
         message = json.loads(msg)
-        self.Print("OpenPosition Update:" + msg, "OpenPosition", "INFO")
+        self.Print("OpenPosition Update:" + message, "OpenPosition", "INFO")
 
     def on_closedposition(self, msg):
         message = json.loads(msg)
-        self.Print("ClosedPosition Update:" + msg, "ClosedPosition", "INFO")
-
+        self.Print("ClosedPosition Update:" + message,
+                   "ClosedPosition", "INFO")
 
     def on_summary(self, msg):
         message = json.loads(msg)
-        self.Print("Summary Update:" + msg, "Summary", "INFO")
+        self.Print("Summary Update:" + message, "Summary", "INFO")
 
     def on_properties(self, msg):
         message = json.loads(msg)
-        if message.has_key("offerId"):
+        if "offerId" in message:
             message['symbol'] = self.symbol_id[message['offerId']]
         self.Print("Property Update:" + msg, "Property", "INFO")
 
     def on_leverageprofile(self, msg):
         message = json.loads(msg)
-        self.Print("LeverageProfile Update:" + msg, "LeverageProfile", "INFO")
+        self.Print("LeverageProfile Update:" + message,
+                   "LeverageProfile", "INFO")
 
     def on_message(self, msg):
         '''
-        Sample generic message handling. Will update that specific message type with the latest message
+        Sample generic message handling.
+        Will update that specific message type with the latest message
 
         :return:
         '''
         message = json.loads(msg)
         msg_type = message['t']
         if msg_type in [3, 5]:
-            if message.has_key("action"):
+            if "action" in message:
                 order_id = message.get("orderId", "")
                 if order_id not in self.open_positions and msg_type == 3:
                     self.open_positions.append(order_id)
@@ -401,11 +436,13 @@ class Trader(object):
                 self.orders[order_id] = self.orders.get(order_id, [])
                 self.orders[order_id].append(message)
         elif msg_type == 1:
-            if message.has_key("currency"):
+            if "currency" in message:
                 currency = message['currency']
-                self.currency_exposure[currency] = {message['accountId']: message}
-            elif message.has_key("tradeId"):
-                self.trades[message['tradeId']] = self.trades.get(message['tradeId'], {})
+                self.currency_exposure[currency] = {
+                    message['accountId']: message}
+            elif "tradeId" in message:
+                self.trades[message['tradeId']] = self.trades.get(
+                    message['tradeId'], {})
                 self.trades[message['tradeId']].update(message)
             else:
                 print("**********************")
@@ -422,9 +459,11 @@ class Trader(object):
         '''
         handler = handler or self.on_price_update
         self.socketIO.on(instrument, handler)
-        return self.send("/subscribe", {"pairs": instrument}, additional_headers={'Transfer-Encoding': "chunked"})
+        return self.send("/subscribe", {"pairs": instrument},
+                         additional_headers={'Transfer-Encoding': "chunked"})
 
-    def unsubscribe_symbol(self, instruments, additional_headers={'Transfer-Encoding': "chunked"}):
+    def unsubscribe_symbol(self, instruments,
+                           headers={'Transfer-Encoding': "chunked"}):
         '''
         Unsubscribe from instrument updates
 
@@ -440,9 +479,10 @@ class Trader(object):
 
     def subscribe(self, items, handler=None):
         '''
-        Subscribes to the updates of the data models. Update will be pushed to client via socketIO
-        Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order',  'Account',  'Summary',
-        'LeverageProfile', 'Properties'
+        Subscribes to the updates of the data models.
+        Update will be pushed to client via socketIO
+        Model choices: 'Offer', 'OpenPosition', 'ClosedPosition',
+        'Order',  'Account',  'Summary', 'LeverageProfile', 'Properties'
 
         :param item:
         :return: response Dict
@@ -457,12 +497,14 @@ class Trader(object):
             else:
                 self.socketIO.on(items, handler)
         else:
-            self.logger.error("Error processing request: /trading/subscribe:" + str(response))
+            self.logger.error(
+                "Error processing /trading/subscribe:" + str(response))
         return response
 
     def unsubscribe(self, item):
         '''
-        Unsubscribe from model ["Offer","Account","Order","OpenPosition","Summary","Properties"]
+        Unsubscribe from model
+        ["Offer","Account","Order","OpenPosition","Summary","Properties"]
 
         :param item:
         :return: response Dict
@@ -472,8 +514,9 @@ class Trader(object):
     def get_model(self, item):
         '''
         Gets current content snapshot of the specified data models.
-        Model choices: 'Offer', 'OpenPosition', 'ClosedPosition', 'Order', 'Summary', 'LeverageProfile',
-        'Account', 'Properties'
+        Model choices:
+        'Offer', 'OpenPosition', 'ClosedPosition', 'Order', 'Summary',
+        'LeverageProfile', 'Account', 'Properties'
 
         :param item:
         :return: response Dict
@@ -488,14 +531,18 @@ class Trader(object):
         :param newpwd:
         :return: response Dict
         '''
-        return self.send("/trading/changePassword", {"oldPswd": oldpwd, "newPswd": newpwd, "confirmNewPswd": newpwd})
+        return self.send("/trading/changePassword", {"oldPswd": oldpwd,
+                                                     "newPswd": newpwd,
+                                                     "confirmNewPswd": newpwd})
 
     def permissions(self):
         '''
-        Gets the object which defines permissions for the specified account identifier and symbol.
-        Each property of that object specifies the corresponding permission ("createEntry", "createMarket",
+        Gets the object which defines permissions for the specified account
+        identifier and symbol. Each property of that object specifies the
+        corresponding permission ("createEntry", "createMarket",
         "netStopLimit", "createOCO" and so on).
-        The value of the property specifies the permission status ("disabled", "enabled" or "hidden")
+        The value of the property specifies the permission status
+        ("disabled", "enabled" or "hidden")
 
 
         :param item:
@@ -503,10 +550,12 @@ class Trader(object):
         '''
         return self.send("/trading/permissions", {}, "get")
 
-    def open_trade(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
-                     order_type="AtMarket", stop=None, trailing_step=None, limit=None, is_in_pips=None):
+    def open_trade(self, account_id, symbol, is_buy, amount, rate=0,
+                   at_market=0, time_in_force="GTC", order_type="AtMarket",
+                   stop=None, trailing_step=None, limit=None, is_in_pips=None):
         '''
-        Create a Market Order with options for At Best or Market Range, and optional attached stops and limits.
+        Create a Market Order with options for At Best or Market Range,
+        and optional attached stops and limits.
 
         :param account_id:
         :param symbol:
@@ -522,13 +571,16 @@ class Trader(object):
         :param is_in_pips: * Optional *
         :return: response Dict
         '''
-        if account_id is None or symbol is None or is_buy is None or amount is None:
-            return self.__return(False, "Failed to provide mandatory parameters")
+        if None in [account_id, symbol, is_buy, amount]:
+            ret = "Failed to provide mandatory parameters"
+            return self.__return(False, ret)
 
         is_buy = 'true' if is_buy else 'false'
         print(is_buy)
-        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
-                      at_market=at_market, time_in_force=time_in_force, order_type=order_type)
+        params = dict(account_id=account_id, symbol=symbol,
+                      is_buy=is_buy, amount=amount, rate=rate,
+                      at_market=at_market, time_in_force=time_in_force,
+                      order_type=order_type)
         if stop is not None:
             params['stop'] = stop
 
@@ -542,7 +594,8 @@ class Trader(object):
             params['is_in_pips'] = is_in_pips
         return self.send("/trading/open_trade", params)
 
-    def close_trade(self, trade_id, amount, at_market=0, time_in_force="GTC", order_type="AtMarket", rate=None):
+    def close_trade(self, trade_id, amount, at_market=0,
+                    time_in_force="GTC", order_type="AtMarket", rate=None):
         '''
         Close existing trade
 
@@ -554,15 +607,16 @@ class Trader(object):
         :param rate: * Optional *
         :return: response Dict
         '''
-        if trade_id is None or amount is None or at_market is None or time_in_force is None or order_type is None:
-            return self.__return(False, "Failed to provide mandatory parameters")
+        if None in [trade_id, amount, at_market, time_in_force, order_type]:
+            ret = "Failed to provide mandatory parameters"
+            return self.__return(False, ret)
         params = dict(trade_id=trade_id, amount=amount, at_market=at_market,
                       time_in_force=time_in_force, order_type=order_type)
         if rate is not None:
             params['rate'] = rate
         return self.send("/trading/close_trade", params)
 
-    def change_order(self, order_id, rate, range, amount, trailing_step=None):
+    def change_order(self, order_id, rate, rng, amount, trailing_step=None):
         '''
         Change order rate/amount
 
@@ -573,16 +627,19 @@ class Trader(object):
         :param trailing_step: * Optional *
         :return: response Dict
         '''
-        if order_id is None or amount is None or rate is None or range is None:
-            return self.__return(False, "Failed to provide mandatory parameters")
-        params = dict(order_id=order_id, rate=rate, range=range,
+        if None in [order_id, amount, rate, rng]:
+            ret = "Failed to provide mandatory parameters"
+            return self.__return(False, ret)
+        params = dict(order_id=order_id, rate=rate, range=rng,
                       amount=amount)
         if trailing_step is not None:
             params['trailing_step'] = trailing_step
         return self.send("/trading/change_order", params)
 
-    def delete_order(self, account_id, symbol, is_buy, amount, rate=0, at_market=0, time_in_force="GTC",
-                     order_type="AtMarket", stop=None, trailing_step=None, limit=None, is_in_pips=None):
+    def delete_order(self, account_id, symbol, is_buy, amount, rate=0,
+                     at_market=0, time_in_force="GTC", order_type="AtMarket",
+                     stop=None, trailing_step=None, limit=None,
+                     is_in_pips=None):
         '''
         Delete open order
 
@@ -600,10 +657,12 @@ class Trader(object):
         :param is_in_pips: * Optional *
         :return: response Dict
         '''
-        if account_id is None or symbol is None or is_buy is None or amount is None:
-            return self.__return(False, "Failed to provide mandatory parameters")
-        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, rate=rate,
-                      at_market=at_market, time_in_force=time_in_force, order_type=order_type)
+        if None in [account_id, symbol, is_buy, amount]:
+            ret = "Failed to provide mandatory parameters"
+            return self.__return(False, ret)
+        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy,
+                      amount=amount, rate=rate, at_market=at_market,
+                      time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
             params['stop'] = stop
 
@@ -617,16 +676,20 @@ class Trader(object):
             params['is_in_pips'] = is_in_pips
         return self.send("/trading/delete_order", params)
 
-    def create_entry_order(self, account_id, symbol, is_buy, amount, limit, is_in_pips, order_type, time_in_force,
+    def create_entry_order(self, account_id, symbol, is_buy, amount, limit,
+                           is_in_pips, order_type, time_in_force,
                            rate=0, stop=None, trailing_step=None):
         """
         Create a Limit Entry or a Stop Entry order.
-        An order priced away from the market (not marketable) will be submitted as a Limit Entry order.
-        An order priced through the market will be submitted as a Stop Entry order.
+        An order priced away from the market (not marketable)
+        will be submitted as a Limit Entry order. An order priced through the
+        market will be submitted as a Stop Entry order.
 
         If the market is at 1.1153 x 1.1159
-        *	Buy Entry order @ 1.1165 will be processed as a Buy Stop Entry order.
-        *	Buy Entry order @ 1.1154 will be processed as a Buy Limit Entry order
+        *   Buy Entry order @ 1.1165 will be processed as a
+            Buy Stop Entry order.
+        *   Buy Entry order @ 1.1154 will be processed as a
+            Buy Limit Entry order
 
         :param account_id:
         :param symbol:
@@ -641,11 +704,13 @@ class Trader(object):
         :param trailing_step: * Optional *
         :return: response Dict
         """
-        if account_id is None or symbol is None or is_buy is None or amount is None or limit is None or \
-                is_in_pips is None or order_type is None or time_in_force is None:
-            return self.__return(False, "Failed to provide mandatory parameters")
-        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy, amount=amount, limit=limit,
-                      is_in_pips=is_in_pips, time_in_force=time_in_force, order_type=order_type)
+        if None in [account_id, symbol, is_buy, amount, limit,
+                    is_in_pips, order_type, time_in_force]:
+            ret = "Failed to provide mandatory parameters"
+            return self.__return(False, ret)
+        params = dict(account_id=account_id, symbol=symbol, is_buy=is_buy,
+                      amount=amount, limit=limit, is_in_pips=is_in_pips,
+                      time_in_force=time_in_force, order_type=order_type)
         if stop is not None:
             params['stop'] = stop
 
@@ -653,9 +718,10 @@ class Trader(object):
             params['trailing_step'] = trailing_step
         return self.send("/trading/create_entry_order", params)
 
-    def simple_oco(self ,account_id, symbol, amount, is_in_pips, time_in_force, expiration, is_buy, rate, stop,
-                   trailing_step,trailing_stop_step, limit, at_market, order_type, is_buy2, rate2, stop2,
-                   trailing_step2, trailing_stop_step2, limit2):
+    def simple_oco(self, account_id, symbol, amount, is_in_pips, time_in_force,
+                   expiration, is_buy, rate, stop, trailing_step,
+                   trailing_stop_step, limit, at_market, order_type, is_buy2,
+                   rate2, stop2, trailing_step2, trailing_stop_step2, limit2):
         '''
         Create simple OCO
 
@@ -698,7 +764,8 @@ class Trader(object):
         :param ocoBulkId:
         :return: response Dict
         '''
-        return self.send("/trading/add_to_oco", {"orderIds": orderIds, "ocoBulkId": ocoBulkId})
+        return self.send("/trading/add_to_oco", {"orderIds": orderIds,
+                                                 "ocoBulkId": ocoBulkId})
 
     def remove_from_oco(self, orderIds):
         '''
@@ -709,7 +776,7 @@ class Trader(object):
         '''
         return self.send("/trading/remove_from_oco", {"orderIds": orderIds})
 
-    def edit_oco(self, ocoBulkId, addOrderIds, removeOrderIds):
+    def edit_oco(self, ocoBulkId, addOrderIds, removeIds):
         '''
         Edit an OCO
 
@@ -718,16 +785,19 @@ class Trader(object):
         :param removeOrderIds:
         :return: response Dict
         '''
-        return self.send("/trading/edit_oco", {"ocoBulkId": ocoBulkId, "addOrderIds": addOrderIds,
-                                               "removeOrderIds": removeOrderIds})
+        return self.send("/trading/edit_oco", {"ocoBulkId": ocoBulkId,
+                                               "addOrderIds": addOrderIds,
+                                               "removeOrderIds": removeIds})
 
-    def change_trade_stop_limit(self, trade_id, is_stop, rate, is_in_pips, trailing_step):
+    def change_trade_stop_limit(self, trade_id, is_stop,
+                                rate, is_in_pips, trailing_step):
         '''
         Creates/removes/changes the stop/limit order for the specified trade.
-        If the current stop/limit rate for the specified trade is not set (is zero) and the new rate is not zero,
-        then creates a new order.
-        If the current stop/limit rate for the specified trade is set (is not zero), changes order rate
-        (if the new rate is not zero) or deletes order (if the new rate is zero).
+        If the current stop/limit rate for the specified trade is not set
+        (is zero) and the new rate is not zero, then creates a new order.
+        If the current stop/limit rate for the specified trade is set
+        (is not zero), changes order rate (if the new rate is not zero) or
+        deletes order (if the new rate is zero).
 
 
         :param trade_id:
@@ -746,13 +816,16 @@ class Trader(object):
         except Exception as e:
             return self.__return(False, str(e))
 
-    def change_order_stop_limit(self, order_id, is_stop, rate, is_in_pips, trailing_step):
+    def change_order_stop_limit(self, order_id, is_stop,
+                                rate, is_in_pips, trailing_step):
         '''
         Creates/removes/changes the stop/limit order for the specified order.
-        If the current stop/limit rate for the specified order is not set (is zero) and the new rate is not zero,
+        If the current stop/limit rate for the specified order is not set
+        (is zero) and the new rate is not zero,
         then creates a new order.
-        If the current stop/limit rate for the specified order is set (is not zero), changes order rate
-        (if the new rate is not zero) or deletes order (if the new rate is zero).
+        If the current stop/limit rate for the specified order is set
+        (is not zero), changes order rate (if the new rate is not zero)
+        or deletes order (if the new rate is zero).
 
 
         :param order_id:
@@ -771,10 +844,12 @@ class Trader(object):
         except Exception as e:
             return self.__return(False, str(e))
 
-    def close_all_for_symbol(self, account_id, forSymbol, symbol, order_type, time_in_force):
+    def close_all_for_symbol(self, account_id, forSymbol,
+                             symbol, order_type, time_in_force):
         '''
-        Closes all trades for the specified account and symbol by creating net quantity orders, if these orders are
-        enabled, or by creating regular close orders otherwise.
+        Closes all trades for the specified account and symbol by creating net
+        quantity orders, if these orders are enabled, or by creating regular
+        close orders otherwise.
 
         :param account_id:
         :param forSymbol: True/False
@@ -791,32 +866,34 @@ class Trader(object):
             return self.send("/trading/close_all_for_symbol", params)
         except Exception as e:
             return self.__return(False, str(e))
-    #
-    # def candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
-    #     return self.get_candles(instrument, period, num, From=None, To=None, datetime_fmt=None)
 
-    def get_candles(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
+    def get_candles(self, instrument, period, num,
+                    From=None, To=None, dt_fmt=None):
         '''
         Allow user to retrieve candle for a given instrument at a give time
 
-        :param instrument: instrument_id or instrument. If instrument, will use mode information to convert to
-                           instrument_id
+        :param instrument: instrument_id or instrument. If instrument, will
+                           use mode information to convert to instrument_id
         :param period: m1, m5, m15, m30, H1, H2, H3, H4, H6, H8, D1, W1, M1
         :param num: candles, max = 10,000
         :param From: timestamp or date/time string. Will conver to timestamp
         :param To: timestamp or date/time string. Will conver to timestamp
-        :param datetime_fmt: Adding this optional parameter will add an additional field to the candle data with the
-        timestamp converted to the datetime string provided. Example:
+        :param dt_fmt: Adding this optional parameter will add an additional
+                       field to the candle data with the timestamp converted
+                       to the datetime string provided. Example:
         .candles("USD/JPY", "m1", 3, datetime_fmt="%Y/%m/%d %H:%M:%S:%f")
-        [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359, 109.358, 109.362, 109.357, 28, '2017/08/26 05:57:00:000000']
+        [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359,
+        109.358, 109.362, 109.357, 28, '2017/08/26 05:57:00:000000']
         :return: response Dict
         '''
         try:
             initial_instrument = instrument
             if not isInt(instrument):
-                instrument = self.symbol_info.get(instrument, {}).get('offerId', -1)
+                instrument = self.symbol_info.get(
+                    instrument, {}).get('offerId', -1)
             if instrument < 0:
-                raise ValueError("Instrument %s not found" % initial_instrument)
+                raise ValueError("Instrument %s not found" %
+                                 initial_instrument)
             if num > 10000:
                 num = 10000
             params = dict(num=num)
@@ -825,13 +902,15 @@ class Trader(object):
                     if not isInt(v):
                         v = int(time.mktime(parse(v).timetuple()))
                     params[k] = v
-            candle_data =  self.send("/candles/%s/%s" % (instrument, period), params, "get")
-            headers= ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
-                      'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
-            if datetime_fmt is not None:
+            candle_data = self.send("/candles/%s/%s" %
+                                    (instrument, period), params, "get")
+            headers = ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
+                       'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
+            if dt_fmt is not None:
                 headers.append("datestring")
                 for i, candle in enumerate(candle_data['candles']):
-                    candle_data['candles'][i].append(datetime.fromtimestamp(candle[0]).strftime(datetime_fmt))
+                    candle_data['candles'][i].append(
+                        datetime.fromtimestamp(candle[0]).strftime(dt_fmt))
             candle_data['headers'] = headers
             return self.__return(candle_data['status'], candle_data)
         except Exception as e:
@@ -839,18 +918,37 @@ class Trader(object):
 
     candles = get_candles
 
-    def candles_as_dict(self, instrument, period, num, From=None, To=None, datetime_fmt=None):
+    def candles_as_dict(self, instrument, period, num,
+                        From=None, To=None, dt_fmt=None):
+        '''
+        Allow user to retrieve candle for a given instrument at a give time
+        as a dictionary.
+
+        :param instrument: instrument_id or instrument. If instrument, will
+                           use mode information to convert to instrument_id
+        :param period: m1, m5, m15, m30, H1, H2, H3, H4, H6, H8, D1, W1, M1
+        :param num: candles, max = 10,000
+        :param From: timestamp or date/time string. Will conver to timestamp
+        :param To: timestamp or date/time string. Will conver to timestamp
+        :param dt_fmt: Adding this optional parameter will add an additional
+                       field to the candle data with the timestamp converted
+                       to the datetime string provided. Example:
+        .candles("USD/JPY", "m1", 3, datetime_fmt="%Y/%m/%d %H:%M:%S:%f")
+        [1503694620, 109.321, 109.326, 109.326, 109.316, 109.359,
+        109.358, 109.362, 109.357, 28, '2017/08/26 05:57:00:000000']
+        :return: response Dict
+        '''
         try:
-            candle_data = self.get_candles(instrument, period, num, From, To, datetime_fmt)
+            candle_data = self.get_candles(
+                instrument, period, num, From, To, dt_fmt)
             status = candle_data['status']
-            if status == True:
+            if status is True:
                 Headers = namedtuple('Headers', candle_data['headers'])
                 candle_dict = map(Headers._make, candle_data['candles'])
                 candle_data['candles'] = candle_dict
             return self.__return(status, candle_data)
         except Exception as e:
             return self.__return(False, str(e))
-
 
 
 HEADERS = {
@@ -860,7 +958,7 @@ HEADERS = {
 CONFIGFILE = "fxcm_rest.json"
 CONFIG = {}
 try:
-    with open(CONFIGFILE, 'r') as f: 
+    with open(CONFIGFILE, 'r') as f:
         CONFIG = json.load(f)
 except Exception as e:
     logging.error("Error loading config: " + e)
