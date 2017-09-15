@@ -112,8 +112,10 @@ class Trader(object):
         # self.login()
 
     def Print(self, message, message_type=None, level='INFO'):
-        loggers = dict(INFO=self.logger.info, DEBUG=self.logger.debug,
-                       WARNING=self.logger.warning, ERROR=self.logger.error,
+        loggers = dict(INFO=self.logger.info,
+                       DEBUG=self.logger.debug,
+                       WARNING=self.logger.warning,
+                       ERROR=self.logger.error,
                        CRITICAL=self.logger.critical)
         if message_type is None or message_type not in self.ignore_output:
             loggers[level](message)

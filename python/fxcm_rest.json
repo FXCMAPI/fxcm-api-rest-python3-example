@@ -17,12 +17,13 @@
         }
     },
     "authentication": {
-        "client_id": "Titan",
+        "client_id": "",
         "client_secret": ""
     },
     "logpath": "./logfile.txt",
     "_debugLevels": "Levels are (from most to least logging) DEBUG, INFO, WARNING, ERROR, CRITICAL",
     "debugLevel": "ERROR",
     "subscription_lists": "#Determines default subscription list of item updates to listen to",
-    "subscription_list": ["Offer","Account","Order","OpenPosition","Summary","Properties"]
+    "subscription_list": ["Offer","Account","Order","OpenPosition","ClosedPosition", "LeverageProfile","Summary",
+        "Properties"]
 }
