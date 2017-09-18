@@ -43,8 +43,8 @@ class PriceUpdate(object):
             date = timestamp_to_string(self.updated)
         except Exception:
             date = None
-        output = "PriceUpdate(bid={0}, ask={0}, \
-                 high={0}, low={0}, updated=%r)".format(self.output_fmt)
+        output = "PriceUpdate(bid={0}, ask={0}," \
+                 "high={0}, low={0}, updated=%r)".format(self.output_fmt)
         return output % (self.bid, self.ask, self.high,
                          self.low, date)
 
@@ -70,17 +70,22 @@ class Trader(object):
     '''
 
     def __init__(self, user, password, environment, messageHandler=None,
-                 purpose='General'):
+                 purpose='General', config_file="fxcm_rest.json"):
+        self.config_file = config_file
+        self.initialize()
         self.socketIO = None
         self.updates = {}
         self.symbols = {}
         self.symbol_info = {}
         self.symbol_id = {}
+        self.account_id = None
         self.account_list = []
-        self.orders = {}
+        self.accounts = {}
+        self.orders_list = {}
         self.trades = {}
-        self.open_positions = []
-        self.closed_positions = []
+        self.subscriptions = {}
+        self.open_positions_list = []
+        self.closed_positions_list = []
         self.currency_exposure = {}
         self.user = user
         self.password = password
@@ -107,7 +112,7 @@ class Trader(object):
         else:
             self.message_handler = self.on_message
         self._log_init()
-        self.list = CONFIG.get('subscription_list', [])
+        self.list = self.CONFIG.get('subscription_list', [])
         self.environment = self._get_config(environment)
         # self.login()
 
@@ -132,15 +137,16 @@ class Trader(object):
 
     def _authenticate(self):
         auth_params = {
-            'client_id': CONFIG.get("authentication", {}).get("client_id"),
-            'client_secret': CONFIG.get("authentication", {})
+            'client_id': self.CONFIG.get("authentication", {})
+                                    .get("client_id"),
+            'client_secret': self.CONFIG.get("authentication", {})
             .get("client_secret"),
             'grant_type': 'password',
             'username': self.user,
             'password': self.password
         }
         post_resp = requests.post(self.environment.get(
-            "auth", ""), headers=HEADERS, data=auth_params)
+            "auth", ""), headers=self.HEADERS, data=auth_params)
         if post_resp.status_code == 200:
             data = post_resp.json()
             tmp_access_token = data["access_token"]
@@ -168,6 +174,8 @@ class Trader(object):
         Do this before any other calls
         :return: Dict
         '''
+        self.access_token = None
+        self.socketIO = None
         auth_response = self._authenticate()
         if auth_response['status']:
             self.access_token = auth_response['data']
@@ -177,12 +185,14 @@ class Trader(object):
                                              self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
-            self.accounts = {}
             accounts = self.get_model("Account").get('accounts', {})
             self.account_list = [a['accountId'] for a in accounts]
+            self.account_id = None
             for account in accounts:
-                self.accounts[account['accountId']] = account
-
+                account_id = account['accountId']
+                self.accounts[account_id] = account
+                if self.account_id is None and account_id != '':
+                    self.account_id = account_id
             thread_name = self.user + self.env + self.purpose
             for thread in threading.enumerate():
                 if thread.name == thread_name:
@@ -198,10 +208,13 @@ class Trader(object):
 
     def logout(self):
         '''
-        Todo - no documentation yet on server side
+        Unsubscribes from all subscribed items and logs out.
         :return:
         '''
-        pass
+        for item in self.subscriptions.keys():
+            self.subscriptions.pop(item)
+            self.socketIO.off(item)
+        self.send("/logout")
 
     def _loop(self):
         while self._socketIO_thread.keepGoing:
@@ -226,7 +239,7 @@ class Trader(object):
         return ret_value
 
     def _send_request(self, method, command, params, additional_headers={}):
-        headers = HEADERS
+        headers = self.HEADERS
         headers['User-Agent'] = 'request'
         # headers.update(additional_headers)
         if self.socketIO is not None and self.socketIO.connected:
@@ -248,7 +261,7 @@ class Trader(object):
         else:
             return self.__return(False, rresp.status_code)
 
-    def send(self, location, params, method='post', additional_headers={}):
+    def send(self, location, params={}, method='post', additional_headers={}):
         '''
         Method to send REST requests to the API
 
@@ -268,11 +281,11 @@ class Trader(object):
             return self.__return(status, response)
 
     def _get_config(self, environment):
-        ret = CONFIG.get("environments", {}).get(environment, {})
+        ret = self.CONFIG.get("environments", {}).get(environment, {})
         if ret == {}:
             self.logger.error(
-                "No configuration found. Please call your trade object with\
-                 'get_config(environment)'.")
+                "No self.CONFIGuration found. Please call your trade object with\
+                 'get_self.CONFIG(environment)'.")
             self.logger.error("Environments are prod, dev or qa.")
         return ret
 
@@ -280,12 +293,19 @@ class Trader(object):
         self.logger = logging.getLogger(
             self.user + "_" + self.env + "_" + str(uuid.uuid4())[:8])
         self.ch = logging.StreamHandler()
-        self.set_log_level(DEBUGLEVEL)
+        self.set_log_level(self.debug_level)
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         # add formatter to ch
         self.ch.setFormatter(formatter)
         self.logger.addHandler(self.ch)
+
+    def _forget(self, subscribed_item):
+        if subscribed_item in self.subscriptions:
+            try:
+                self.subscriptions.pop(subscribed_item)
+            except Exception:
+                pass
 
     def set_log_level(self, level):
         '''
@@ -295,8 +315,8 @@ class Trader(object):
 
         :return: None
         '''
-        self.logger.setLevel(LOGLEVELS.get(level, "ERROR"))
-        self.ch.setLevel(LOGLEVELS.get(level, "ERROR"))
+        self.logger.setLevel(self.LOGLEVELS.get(level, "ERROR"))
+        self.ch.setLevel(self.LOGLEVELS.get(level, "ERROR"))
 
     def _add_method(self):
         pass
@@ -305,8 +325,8 @@ class Trader(object):
         '''
         Actions to be preformed on login. By default will subscribe to updates
         for items defined in subscription_list. subscription_list is in the
-        json config with options explained there. If messageHandler was passed
-        on instantiation, that will be used to handle all messages.
+        json self.CONFIG with options explained there. If messageHandler was
+        passed on instantiation, that will be used to handle all messages.
         Alternatively, this method can be overridden before login is called to
         provide different on_connect functionality.
 
@@ -362,8 +382,10 @@ class Trader(object):
         try:
             md = json.loads(msg)
             symbol = md["Symbol"]
+            symbol_info = self.symbol_info.get(symbol, {})
             p_up = dict(symbol_info=self.symbol_info[symbol], parent=self)
-            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate(p_up))
+            self.symbols[symbol] = self.symbols.get(symbol, PriceUpdate(p_up,
+                                                    symbol_info=symbol_info))
             self.symbols[symbol].bid, self.symbols[symbol].ask,\
                 self.symbols[symbol].high,\
                 self.symbols[symbol].low = md['Rates']
@@ -385,10 +407,10 @@ class Trader(object):
     def on_order(self, msg):
         message = json.loads(msg)
         order_id = message.get('orderId', '')
-        self.orders[order_id] = self.orders.get(order_id, {'actions': []})
+        self.orders_list[order_id] = self.orders.get(order_id, {'actions': []})
         if "action" in message:
-            self.orders[order_id]['actions'].append(message)
-        self.orders[order_id].update(message)
+            self.orders_list[order_id]['actions'].append(message)
+        self.orders_list[order_id].update(message)
         self.Print("Order Update:" + msg, "Order", "INFO")
 
     def on_openposition(self, msg):
@@ -427,16 +449,16 @@ class Trader(object):
         if msg_type in [3, 5]:
             if "action" in message:
                 order_id = message.get("orderId", "")
-                if order_id not in self.open_positions and msg_type == 3:
-                    self.open_positions.append(order_id)
-                if order_id not in self.closed_positions and msg_type == 5:
+                if order_id not in self.open_positions_list and msg_type == 3:
+                    self.open_positions_list.append(order_id)
+                if order_id not in self.closed_positions_list and msg_type == 5:
                     try:
-                        self.open_positions.remove(order_id)
+                        self.open_positions_list.remove(order_id)
                     except Exception:
                         pass
-                    self.closed_positions.append(order_id)
-                self.orders[order_id] = self.orders.get(order_id, [])
-                self.orders[order_id].append(message)
+                    self.closed_positions_list.append(order_id)
+                self.orders_list[order_id] = self.orders_list.get(order_id, [])
+                self.orders_list[order_id].append(message)
         elif msg_type == 1:
             if "currency" in message:
                 currency = message['currency']
@@ -452,16 +474,54 @@ class Trader(object):
                 print("----------------------\n")
                 self.updates[message["t"]] = message
 
-    def subscribe_symbol(self, instrument, handler=None):
+    @property
+    def summary(self):
+        '''
+        Provides a summary snapshot ofthe account
+        '''
+        return self.get_model("Summary").get('summary', [])
+
+    @property
+    def offers(self):
+        return self.get_model("Offer").get('offers', [])
+
+    @property
+    def open_positions(self):
+        return self.get_model('OpenPosition').get('open_positions', [])
+
+    @property
+    def closed_positions(self):
+        return self.get_model('ClosedPosition').get('closed_positions', [])
+
+    @property
+    def orders(self):
+        return self.get_model('Order').get('orders', [])
+
+    @property
+    def leverage_profile(self):
+        return self.get_model("LeverageProfile").get('leverage_profile', [])
+
+    @property
+    def properties(self):
+        return self.get_model("Properties").get('properties', [])
+
+    def subscribe_symbol(self, instruments, handler=None):
         '''
         Subscribe to given instrument
 
-        :param instrument:
+        :param instruments:
         :return: response Dict
         '''
         handler = handler or self.on_price_update
-        self.socketIO.on(instrument, handler)
-        return self.send("/subscribe", {"pairs": instrument},
+        if type(instruments) is list:
+            print("This was a list")
+            for instrument in instruments:
+                self.subscriptions[instrument] = instrument
+                self.socketIO.on(instrument, handler)
+        else:
+            self.subscriptions[instruments] = instruments
+            self.socketIO.on(instruments, handler)
+        return self.send("/subscribe", {"pairs": instruments},
                          additional_headers={'Transfer-Encoding': "chunked"})
 
     def unsubscribe_symbol(self, instruments,
@@ -474,9 +534,11 @@ class Trader(object):
         '''
         if type(instruments) is list:
             for instrument in instruments:
+                self._forget(instrument)
                 self.socketIO.off(instrument)
         else:
             self.socketIO.off(instruments)
+            self._forget(instruments)
         return self.send("/unsubscribe", {"pairs": instruments})
 
     def subscribe(self, items, handler=None):
@@ -503,7 +565,7 @@ class Trader(object):
                 "Error processing /trading/subscribe:" + str(response))
         return response
 
-    def unsubscribe(self, item):
+    def unsubscribe(self, items):
         '''
         Unsubscribe from model
         ["Offer","Account","Order","OpenPosition","Summary","Properties"]
@@ -511,6 +573,13 @@ class Trader(object):
         :param item:
         :return: response Dict
         '''
+        if type(items) is list:
+            for item in items:
+                self._forget(item)
+                self.socketIO.off(item)
+        else:
+            self._forget(items)
+            self.socketIO.off(items)
         return self.send("/trading/unsubscribe", {"models": item})
 
     def get_model(self, item):
@@ -952,21 +1021,20 @@ class Trader(object):
         except Exception as e:
             return self.__return(False, str(e))
 
-
-HEADERS = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/x-www-form-urlencoded'
-}
-CONFIGFILE = "fxcm_rest.json"
-CONFIG = {}
-try:
-    with open(CONFIGFILE, 'r') as f:
-        CONFIG = json.load(f)
-except Exception as e:
-    logging.error("Error loading config: " + e)
-DEBUGLEVEL = CONFIG.get("debugLevel", "INFO")
-LOGLEVELS = {"ERROR": logging.ERROR,
-             "DEBUG": logging.DEBUG,
-             "INFO": logging.INFO,
-             "WARNING": logging.WARNING,
-             "CRITICAL": logging.CRITICAL}
+    def initialize(self):
+        self.HEADERS = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        self.CONFIG = {}
+        try:
+            with open(self.config_file, 'r') as f:
+                self.CONFIG = json.load(f)
+        except Exception as e:
+            logging.error("Error loading self.CONFIG: " + str(e))
+        self.debug_level = self.CONFIG.get("DEBUGLEVEL", "ERROR")
+        self.LOGLEVELS = {"ERROR": logging.ERROR,
+                          "DEBUG": logging.DEBUG,
+                          "INFO": logging.INFO,
+                          "WARNING": logging.WARNING,
+                          "CRITICAL": logging.CRITICAL}

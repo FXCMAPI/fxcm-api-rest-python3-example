@@ -96,3 +96,8 @@ crossbar/
 fxcm_rest.json
 .ipynb_checkpoints/
 _pycache_/
+rest_client.py
+fxcm_rest_gevent.py
+.gitignore
+python/fxcm_rest.json
+python/fxcm_rest.json
