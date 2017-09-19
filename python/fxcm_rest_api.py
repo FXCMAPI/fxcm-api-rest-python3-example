@@ -84,8 +84,8 @@ class Trader(object):
         self.orders_list = {}
         self.trades = {}
         self.subscriptions = {}
-        self.open_positions_list = []
-        self.closed_positions_list = []
+        self.open_list = []
+        self.closed_list = []
         self.currency_exposure = {}
         self.user = user
         self.password = password
@@ -334,6 +334,7 @@ class Trader(object):
         '''
         self.logger.info('Websocket connected: ' +
                          self.socketIO._engineIO_session.id)
+        self.get_offers()
         # status, response = self.send('/trading/subscribe',
         #                              {'models': self.list})
         for item in self.list:
@@ -342,8 +343,7 @@ class Trader(object):
                 self.subscribe(item)
             else:
                 self.subscribe(item, handler)
-# Obtain and store the list of instruments in the symbol_info dict
-        self.get_offers()
+# Obtain and store the list of instruments in the symbol_info dict        
 
     def get_offers(self):
         response = self.get_model("Offer")
@@ -407,7 +407,8 @@ class Trader(object):
     def on_order(self, msg):
         message = json.loads(msg)
         order_id = message.get('orderId', '')
-        self.orders_list[order_id] = self.orders.get(order_id, {'actions': []})
+        self.orders_list[order_id] = self.orders_list.get(order_id,
+                                                         {'actions': []})
         if "action" in message:
             self.orders_list[order_id]['actions'].append(message)
         self.orders_list[order_id].update(message)
@@ -415,16 +416,16 @@ class Trader(object):
 
     def on_openposition(self, msg):
         message = json.loads(msg)
-        self.Print("OpenPosition Update:" + message, "OpenPosition", "INFO")
+        self.Print("OpenPosition Update:" + msg, "OpenPosition", "INFO")
 
     def on_closedposition(self, msg):
         message = json.loads(msg)
-        self.Print("ClosedPosition Update:" + message,
+        self.Print("ClosedPosition Update:" + msg,
                    "ClosedPosition", "INFO")
 
     def on_summary(self, msg):
         message = json.loads(msg)
-        self.Print("Summary Update:" + message, "Summary", "INFO")
+        self.Print("Summary Update:" + msg, "Summary", "INFO")
 
     def on_properties(self, msg):
         message = json.loads(msg)
@@ -434,7 +435,7 @@ class Trader(object):
 
     def on_leverageprofile(self, msg):
         message = json.loads(msg)
-        self.Print("LeverageProfile Update:" + message,
+        self.Print("LeverageProfile Update:" + msg,
                    "LeverageProfile", "INFO")
 
     def on_message(self, msg):
@@ -444,35 +445,7 @@ class Trader(object):
 
         :return:
         '''
-        message = json.loads(msg)
-        msg_type = message['t']
-        if msg_type in [3, 5]:
-            if "action" in message:
-                order_id = message.get("orderId", "")
-                if order_id not in self.open_positions_list and msg_type == 3:
-                    self.open_positions_list.append(order_id)
-                if order_id not in self.closed_positions_list and msg_type == 5:
-                    try:
-                        self.open_positions_list.remove(order_id)
-                    except Exception:
-                        pass
-                    self.closed_positions_list.append(order_id)
-                self.orders_list[order_id] = self.orders_list.get(order_id, [])
-                self.orders_list[order_id].append(message)
-        elif msg_type == 1:
-            if "currency" in message:
-                currency = message['currency']
-                self.currency_exposure[currency] = {
-                    message['accountId']: message}
-            elif "tradeId" in message:
-                self.trades[message['tradeId']] = self.trades.get(
-                    message['tradeId'], {})
-                self.trades[message['tradeId']].update(message)
-            else:
-                print("**********************")
-                print(message)
-                print("----------------------\n")
-                self.updates[message["t"]] = message
+        self.Print(msg, -1, "INFO")
 
     @property
     def summary(self):
@@ -818,9 +791,10 @@ class Trader(object):
         :param limit2:
         :return: response Dict
         '''
+        items = locals().items()
         params = {}
         try:
-            for k, v in locals().iteritems():
+            for k, v in items:
                 if k != "self":
                     params[k] = v
             return self.__return(self.send("/trading/simple_oco", params))
@@ -878,9 +852,10 @@ class Trader(object):
         :param trailing_step:
         :return: response Dict
         '''
+        items = locals().items()
         params = {}
         try:
-            for k, v in locals().iteritems():
+            for k, v in items:
                 if k != "self":
                     params[k] = v
             return self.send("/trading/change_trail_stop_limit", params)
@@ -906,9 +881,10 @@ class Trader(object):
         :param trailing_step:
         :return: response Dict
         '''
+        items = locals().items()
         params = {}
         try:
-            for k, v in locals().iteritems():
+            for k, v in items:
                 if k != "self":
                     params[k] = v
             return self.send("/trading/change_order_stop_limit", params)
@@ -929,9 +905,10 @@ class Trader(object):
         :param time_in_force: IOC GTC FOK DAY GTD
         :return: response Dict
         '''
+        items = locals().items()
         params = {}
         try:
-            for k, v in locals().iteritems():
+            for k, v in items:
                 if k != "self":
                     params[k] = v
             return self.send("/trading/close_all_for_symbol", params)
@@ -968,7 +945,7 @@ class Trader(object):
             if num > 10000:
                 num = 10000
             params = dict(num=num)
-            for k, v in {"From": From, "To": To}.iteritems():
+            for k, v in {"From": From, "To": To}.items():
                 if v is not None:
                     if not isInt(v):
                         v = int(time.mktime(parse(v).timetuple()))
