@@ -185,6 +185,7 @@ class Trader(object):
                                              self.access_token})
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
+            # time.sleep(2)            
             accounts = self.get_model("Account").get('accounts', {})
             self.account_list = [a['accountId'] for a in accounts]
             self.account_id = None
@@ -197,7 +198,7 @@ class Trader(object):
             for thread in threading.enumerate():
                 if thread.name == thread_name:
                     thread.keepGoing = False
-            self._socketIO_thread = threading.Thread(target=self._loop)
+            self._socketIO_thread = threading.Thread(target=self.socketIO.wait)
             self._socketIO_thread.setName(thread_name)
             self._socketIO_thread.keepGoing = True
             self._socketIO_thread.setDaemon(True)
