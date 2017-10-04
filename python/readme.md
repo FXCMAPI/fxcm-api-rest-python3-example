@@ -12,7 +12,15 @@ For a quick demo:
   d. Set subscription lists if desired
 5. In the fxcm_rest_client_sample.py file:
     a. Set your username, password and environment (prod/qa/dev)
-    
+
+For a Notebook demo:
+--------------------
+1. Install Python
+2. Run: pip install jupyter < if you don't have jupyter installed already>
+3. Run: pip install -r requirements.txt
+4. In this directory run: jupyter notebook
+5. Start the RestApiNotebook.ipynb.
+
 ## Details
 
 This API exposes the methods of the REST API as a class, dealing with all of the common tasks 
