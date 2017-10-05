@@ -91,6 +91,7 @@ class Trader(object):
         self.password = password
         self.env = environment
         self.purpose = purpose
+        self.connected = False
 
         # for debugging - allows the suppression of specific messages
         # sent to self.Print.Helpful for when logging to console and
@@ -149,11 +150,11 @@ class Trader(object):
             "auth", ""), headers=self.HEADERS, data=auth_params)
         if post_resp.status_code == 200:
             data = post_resp.json()
-            tmp_access_token = data["access_token"]
+            tmp_token = data["access_token"]
             try:
-                response = self.send('/authenticate',
-                                     {'client_id': 'TRADING',
-                                      'access_token': tmp_access_token})
+                response = self._send_request('post', '/authenticate',
+                                              {'client_id': 'TRADING',
+                                               'access_token': tmp_token})
             except Exception as e:
                 status = False
                 self.logger.fatal("Could not authenticate! " + str(e))
@@ -177,6 +178,7 @@ class Trader(object):
         self.access_token = None
         self.socketIO = None
         auth_response = self._authenticate()
+        self.auth_response = auth_response
         if auth_response['status']:
             self.access_token = auth_response['data']
             self.socketIO = SocketIO(self.environment.get("trading"),
@@ -186,14 +188,6 @@ class Trader(object):
             self.socketIO.on('connect', self.on_connect)
             self.socketIO.on('disconnect', self.on_disconnect)
             # time.sleep(2)            
-            accounts = self.get_model("Account").get('accounts', {})
-            self.account_list = [a['accountId'] for a in accounts]
-            self.account_id = None
-            for account in accounts:
-                account_id = account['accountId']
-                self.accounts[account_id] = account
-                if self.account_id is None and account_id != '':
-                    self.account_id = account_id
             thread_name = self.user + self.env + self.purpose
             for thread in threading.enumerate():
                 if thread.name == thread_name:
@@ -239,7 +233,7 @@ class Trader(object):
             ret_value.update({'data': data})
         return ret_value
 
-    def _send_request(self, method, command, params, additional_headers={}):
+    def _send_request(self, method, command, params={}, additional_headers={}):
         headers = self.HEADERS
         headers['User-Agent'] = 'request'
         # headers.update(additional_headers)
@@ -271,15 +265,18 @@ class Trader(object):
         :param method: GET, POST, DELETE, PATCH
         :return: response Dict
         '''
-        try:
-            response = self._send_request(
-                method, location, params, additional_headers)
-            return response
-        except Exception as e:
-            self.logger.error("Failed to send request [%s]: %s" % (params, e))
-            status = False
-            response = str(e)
-            return self.__return(status, response)
+        if self.connected:
+            try:
+                response = self._send_request(
+                    method, location, params, additional_headers)
+                return response
+            except Exception as e:
+                self.logger.error("Failed to send request [%s]: %s" % (params, e))
+                status = False
+                response = str(e)
+                return self.__return(status, response)
+        else:
+            return self.__return(False, "Not connected")
 
     def _get_config(self, environment):
         ret = self.CONFIG.get("environments", {}).get(environment, {})
@@ -333,11 +330,20 @@ class Trader(object):
 
         :return: None
         '''
+        self.connected = True
         self.logger.info('Websocket connected: ' +
                          self.socketIO._engineIO_session.id)
         self.get_offers()
         # status, response = self.send('/trading/subscribe',
         #                              {'models': self.list})
+        accounts = self.get_model("Account").get('accounts', {})
+        self.account_list = [a['accountId'] for a in accounts]
+        self.account_id = None
+        for account in accounts:
+            account_id = account['accountId']
+            self.accounts[account_id] = account
+            if self.account_id is None and account_id != '':
+                self.account_id = account_id
         for item in self.list:
             handler = self.update_handlers.get(item, None)
             if handler is None:
@@ -361,6 +367,8 @@ class Trader(object):
         :return: None
         '''
         self.logger.info("Websocket closed")
+        self.connected = False
+        return self.__return(False, 'disconnected')
 
     def register_handler(self, message, handler):
         '''
@@ -493,10 +501,15 @@ class Trader(object):
                 self.subscriptions[instrument] = instrument
                 self.socketIO.on(instrument, handler)
         else:
-            self.subscriptions[instruments] = instruments
-            self.socketIO.on(instruments, handler)
-        return self.send("/subscribe", {"pairs": instruments},
-                         additional_headers={'Transfer-Encoding': "chunked"})
+            headers = {'Transfer-Encoding': "chunked"}
+            res = self.send("/subscribe", {"pairs": instruments},
+                            additional_headers=headers)
+            if res['status'] is True:
+                self.subscriptions[instruments] = instruments
+                self.socketIO.on(instruments, handler)
+            else:
+                return res
+        return res
 
     def unsubscribe_symbol(self, instruments,
                            headers={'Transfer-Encoding': "chunked"}):
@@ -941,6 +954,8 @@ class Trader(object):
                 instrument = self.symbol_info.get(
                     instrument, {}).get('offerId', -1)
             if instrument < 0:
+                if self.connected is False:
+                    return self.__return(False, "Not Connected")
                 raise ValueError("Instrument %s not found" %
                                  initial_instrument)
             if num > 10000:
@@ -953,6 +968,8 @@ class Trader(object):
                     params[k] = v
             candle_data = self.send("/candles/%s/%s" %
                                     (instrument, period), params, "get")
+            if candle_data['status'] is False:
+                return candle_data
             headers = ['timestamp', 'bidopen', 'bidclose', 'bidhigh', 'bidlow',
                        'askopen', 'askclose', 'askhigh', 'asklow', 'tickqty']
             if dt_fmt is not None:
