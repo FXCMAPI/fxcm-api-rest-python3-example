@@ -6,10 +6,6 @@
             "port": 443
         }
     },
-    "authentication": {
-        "client_id": "Titan",
-        "client_secret": "qqq"
-    },
     "logpath": "./logfile.txt",
     "_debugLevels": "Levels are (from most to least logging) DEBUG, INFO, WARNING, ERROR, CRITICAL",
     "debugLevel": "ERROR",
