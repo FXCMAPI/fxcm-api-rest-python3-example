@@ -268,7 +268,7 @@ class Trader(object):
             self.logger.error(
                 "No self.CONFIGuration found. Please call your trade object with\
                  'get_self.CONFIG(environment)'.")
-            self.logger.error("Environments are prod, dev or qa.")
+            self.logger.error("Environments are demo or real.")
         return ret
 
     def _log_init(self):
