@@ -2,7 +2,7 @@
     "environments": {
         "prod": {
             "auth": "https://www-beta2.fxcorporate.com/oauth/token",
-            "trading": "https://api.fxcm.com",
+            "trading": "https://api-demo.fxcm.com",
             "port": 443
         },
         "qa": {
@@ -17,8 +17,8 @@
         }
     },
     "authentication": {
-        "client_id": "",
-        "client_secret": ""
+        "client_id": "Titan",
+        "client_secret": "qqq"
     },
     "logpath": "./logfile.txt",
     "_debugLevels": "Levels are (from most to least logging) DEBUG, INFO, WARNING, ERROR, CRITICAL",
