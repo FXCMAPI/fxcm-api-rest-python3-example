@@ -28,33 +28,39 @@ involved with setting up connections and wiring callback listeners for you. In a
 there are a few convenience methods. 
 A quick example is as follows;
 
-    import fxcm_rest_api
+    import fxcm_rest_api_token
     import time
-    trader = fxcm_rest_api.Trader('YOURTOKEN', 'environment')
+    trader = fxcm_rest_api_token.Trader('YOURTOKEN', 'prod')
     trader.login()
-    
+
     #### Open Market Order
     # query account details and use the first account found
-    status, accounts = trader.get_model("Account")
+    accounts = trader.get_model("Account")
     account_id = accounts['accounts'][0]['accountId']
     # Open 10 lots on USD/JPY for the first account_id found.
-    status, response = trader.open_trade(account_id, "USD/JPY", True, 10)
-    if status:
+    response = trader.open_trade(account_id, "USD/JPY", True, 10)
+    if response['status']:
     # close all USD/JPY trades.
-      status, response = trader.close_all_for_symbol("USD/JPY")
-    
+      response = trader.close_all_for_symbol("USD/JPY")
+
     #### Historical Data request
-    status, basic = trader.candles("USD/JPY", "m1", 5)
-    status, date_fmt = trader.candles("USD/JPY", "m1", 5, datetime_fmt="%Y/%m/%d %H:%M:%S")
-    status, date_fmt_headers = trader.candles_as_dict("USD/JPY", "m1", 3, datetime_fmt="%Y/%m/%d %H:%M:%S")
-    
+    basic = trader.candles("USD/JPY", "m1", 5)
+    print(basic)
+    date_fmt = trader.candles("USD/JPY", "m1", 5, dt_fmt="%Y/%m/%d %H:%M:%S")
+    print(date_fmt)
+    date_fmt_headers = trader.candles_as_dict("USD/JPY", "m1", 3, dt_fmt="%Y/%m/%d %H:%M:%S")
+    print(date_fmt_headers)
     ##### Price subscriptions
-    status, subscription_result = trader.subscribe_symbol("USD/JPY")
-    
+    subscription_result = trader.subscribe_symbol("USD/JPY")
+
     # Define alternative price update handler and supply that.
     def pupdate(msg):
-        print "Price update: ", msg
-    status, subscription_result = trader.subscribe_symbol("USD/JPY", pupdate)
+        print("Price update: ", msg)
+    subscription_result = trader.subscribe_symbol("USD/JPY", pupdate)
+    counter = 1
+    while counter < 60:
+        time.sleep(1)
+        counter += 1 
   
 (All calls to candles allow either instrument name, or offerId. They also allow the From and To to be specified
 as timestamp or a date/time format that will be interpreted ("2017/08/01 10:00", "Aug 1, 2017 10:00", etc.).
