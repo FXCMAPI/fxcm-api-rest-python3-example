@@ -11,7 +11,7 @@ For a quick demo:
   c. Set debugLevel if desired
   d. Set subscription lists if desired
 5. In the fxcm_rest_client_sample.py file:
-    a. Set your username, password and environment (prod/qa/dev)
+    a. Set your token and environment (prod/qa/dev)
 
 For a Notebook demo:
 --------------------
