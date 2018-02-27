@@ -29,7 +29,8 @@ there are a few convenience methods.
 A quick example is as follows;
 
     import fxcm_rest_api
-    trader = fxcm_rest_api.Trader('username', 'password', 'environment')
+    import time
+    trader = fxcm_rest_api.Trader('YOURTOKEN', 'environment')
     trader.login()
     
     #### Open Market Order
@@ -40,7 +41,7 @@ A quick example is as follows;
     status, response = trader.open_trade(account_id, "USD/JPY", True, 10)
     if status:
     # close all USD/JPY trades.
-      status, response = trader.close_all_for_symbol(account_id, True, "USD/JPY", "AtMarket", "GTC")
+      status, response = trader.close_all_for_symbol("USD/JPY")
     
     #### Historical Data request
     status, basic = trader.candles("USD/JPY", "m1", 5)
