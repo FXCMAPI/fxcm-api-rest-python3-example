@@ -1,19 +1,9 @@
 {
     "environments": {
-        "prod": {
+        "demo": {
             "auth": "https://www-beta2.fxcorporate.com/oauth/token",
             "trading": "https://api-demo.fxcm.com",
             "port": 443
-        },
-        "qa": {
-            "auth": "https://titan2x.fxcorporate.com/oauth/token",
-            "trading": "https://titan3x.fxcorporate.com",
-            "port": 443
-        },
-        "dev": {
-            "auth": "https://devtitan.fxcorporate.com:8080/oauth/token",
-            "trading": "https://devtitan.fxcorporate.com:8088",
-            "port": 8088
         }
     },
     "authentication": {

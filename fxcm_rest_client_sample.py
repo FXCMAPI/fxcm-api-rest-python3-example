@@ -2,7 +2,7 @@ import json
 import fxcm_rest_api_token as fxcm_rest_api
 import time
 
-trader = fxcm_rest_api.Trader('YOURTOKEN', 'prod') # prod for demo 
+trader = fxcm_rest_api.Trader('YOURTOKEN', 'demo') # demo for demo 
 trader.login()
 try:
     print("Logged in, now getting Account details")
