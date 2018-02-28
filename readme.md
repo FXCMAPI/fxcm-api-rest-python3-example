@@ -1,17 +1,19 @@
 # Python REST API
 
+After cloning this repository: 
+
 For a quick demo:
 -----------------
 1. Install python
 2. Run: pip install -r requirements.txt
-3. Change login and password in rest_client.py file
+3. Change token in rest_client.py file
 4. Within the fxcm_rest.json file:
-  a. * Set log path via the logpath field
-  b. * Set the authentication client_id and client_secret details.
-  c. Set debugLevel if desired
-  d. Set subscription lists if desired
+   * Set log path via the logpath field
+   * Set the authentication client_id and client_secret details.
+   * Set debugLevel if desired
+   * Set subscription lists if desired
 5. In the fxcm_rest_client_sample.py file:
-    a. Set your token and environment (prod/qa/dev)
+   * Set your token and environment (prod/qa/dev)
 
 For a Notebook demo:
 --------------------
