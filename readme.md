@@ -13,7 +13,7 @@ For a quick demo:
    * Set debugLevel if desired
    * Set subscription lists if desired
 5. In the fxcm_rest_client_sample.py file:
-   * Set your token and environment (prod/qa/dev)
+   * Set your token and environment (demo/real)
 
 For a Notebook demo:
 --------------------
